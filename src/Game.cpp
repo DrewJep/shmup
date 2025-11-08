@@ -2,6 +2,7 @@
 #include "IsometricUtils.h"
 #include "Projectile.h"
 #include "Path.h"
+#include "ShootingPattern.h"
 #include <iostream>
 #include <optional>
 #include <cmath>
@@ -77,6 +78,14 @@ Game::Game()
         // Each enemy gets its own Path instance so internal position advances separately.
         auto p = std::make_unique<Path>(patrol, 80.0f, true);
         enemies.back()->setPath(std::move(p));
+        // Assign shooting patterns: lead enemy shoots radial bursts, followers shoot at player
+        if (i == 0) {
+            enemies.back()->setShootingPattern(makeRadialPattern(10, 3.0f, 160.0f));
+        } else {
+            // Faster fire rate for closer trailing enemies
+            float rate = 1.2f - i * 0.3f;
+            enemies.back()->setShootingPattern(makeDirectAtPlayerPattern(rate, 240.0f, 400.0f, false));
+        }
     }
 }
 
@@ -156,10 +165,11 @@ void Game::update(float deltaTime) {
         }
     }
     
-    // Update enemies
+    // Update enemies (pass player position and allow enemies to spawn projectiles)
+    sf::Vector2f playerPos = playerShip.getPosition();
     for (auto it = enemies.begin(); it != enemies.end();) {
-        (*it)->update(deltaTime, WINDOW_WIDTH, WINDOW_HEIGHT);
-        
+        (*it)->update(deltaTime, WINDOW_WIDTH, WINDOW_HEIGHT, playerPos, projectiles);
+
         // Remove dead enemies
         if ((*it)->isDead()) {
             it = enemies.erase(it);
@@ -450,17 +460,18 @@ void Game::checkCollisions() {
     // Check each projectile against each enemy
     for (auto projIt = projectiles.begin(); projIt != projectiles.end();) {
         bool projectileHit = false;
-        
-        for (auto enemyIt = enemies.begin(); enemyIt != enemies.end();) {
-            if ((*projIt)->checkCollision((*enemyIt)->getBounds())) {
-                // Projectile hit enemy
-                (*enemyIt)->takeDamage(1); // Beams do 1 damage
-                projectileHit = true;
-                
-                // If enemy is dead, it will be removed in the update loop
-                break;
-            } else {
-                ++enemyIt;
+        // Only player-owned projectiles should damage enemies
+        if ((*projIt)->getOwner() == Projectile::Owner::Player) {
+            for (auto enemyIt = enemies.begin(); enemyIt != enemies.end();) {
+                if ((*projIt)->checkCollision((*enemyIt)->getBounds())) {
+                    // Projectile hit enemy
+                    (*enemyIt)->takeDamage(1); // Beams do 1 damage
+                    projectileHit = true;
+                    // If enemy is dead, it will be removed in the update loop
+                    break;
+                } else {
+                    ++enemyIt;
+                }
             }
         }
         
@@ -470,6 +481,19 @@ void Game::checkCollisions() {
         } else {
             ++projIt;
         }
+    }
+
+    // Check enemy projectiles against the player
+    for (auto projIt = projectiles.begin(); projIt != projectiles.end();) {
+        if ((*projIt)->getOwner() == Projectile::Owner::Enemy) {
+            if ((*projIt)->checkCollision(playerShip.getBounds())) {
+                // Damage player and remove projectile
+                playerShip.takeDamage(1);
+                projIt = projectiles.erase(projIt);
+                continue;
+            }
+        }
+        ++projIt;
     }
 }
 

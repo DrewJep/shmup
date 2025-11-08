@@ -1,6 +1,7 @@
 #include "Enemy.h"
 #include <cmath>
 #include <cstdlib>
+#include "ShootingPattern.h"
 // Path is included via Enemy.h
 
 // Static texture
@@ -71,7 +72,7 @@ void Enemy::updateAnimation(float deltaTime) {
     }
 }
 
-void Enemy::update(float deltaTime, int screenWidth, int screenHeight) {
+void Enemy::update(float deltaTime, int screenWidth, int screenHeight, const sf::Vector2f& playerPos, std::vector<std::unique_ptr<Projectile>>& projectiles) {
     // If following a path, updateMovement will set position directly.
     bool followingPath = (path != nullptr);
     updateMovement(deltaTime, screenWidth, screenHeight);
@@ -87,6 +88,11 @@ void Enemy::update(float deltaTime, int screenWidth, int screenHeight) {
 
     // Animate
     updateAnimation(deltaTime);
+
+    // Allow shooter to spawn projectiles
+    if (shooter) {
+        shooter->update(deltaTime, position, playerPos, projectiles);
+    }
 }
 
 void Enemy::updateMovement(float deltaTime, int screenWidth, int screenHeight) {
@@ -129,6 +135,10 @@ void Enemy::setPath(std::unique_ptr<Path> p) {
         // When following a path, zero movement velocity so we don't add it each frame
         velocity = sf::Vector2f(0.f, 0.f);
     }
+}
+
+void Enemy::setShootingPattern(std::unique_ptr<ShootingPattern> p) {
+    shooter = std::move(p);
 }
 
 bool Enemy::hasPath() const {

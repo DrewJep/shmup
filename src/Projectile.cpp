@@ -2,42 +2,59 @@
 #include <cmath>
 
 // Static texture initialization
-std::unique_ptr<sf::Texture> Projectile::texture = nullptr;
+std::unique_ptr<sf::Texture> Projectile::texturePlayer = nullptr;
+std::unique_ptr<sf::Texture> Projectile::textureEnemy = nullptr;
 
 bool Projectile::loadTexture() {
-    if (texture == nullptr) {
-        texture = std::make_unique<sf::Texture>();
-        if (!texture->loadFromFile("assets/characters/shot.png")) {
-            texture.reset();
-            return false;
+    // Load player shot texture
+    if (!texturePlayer) {
+        texturePlayer = std::make_unique<sf::Texture>();
+        if (!texturePlayer->loadFromFile("assets/characters/shot.png")) {
+            texturePlayer.reset();
         }
     }
-    return true;
+
+    // Load enemy (UFO) beam texture
+    if (!textureEnemy) {
+        textureEnemy = std::make_unique<sf::Texture>();
+        if (!textureEnemy->loadFromFile("assets/characters/ufo_beam.png")) {
+            // If specific enemy beam not found, fall back to player shot texture
+            textureEnemy.reset();
+        }
+    }
+
+    // At least one texture must be available
+    return (texturePlayer != nullptr) || (textureEnemy != nullptr);
 }
 
 void Projectile::unloadTexture() {
-    texture.reset();
+    texturePlayer.reset();
+    textureEnemy.reset();
 }
 
-Projectile::Projectile(float x, float y, float angle, float speed)
-    : position(x, y), speed(speed), currentFrame(0), 
-      animationTimer(0.0f), frameDuration(0.05f), sprite(nullptr) { // 50ms per frame = 20 FPS animation
+Projectile::Projectile(float x, float y, float angle, float speed, Owner owner)
+        : position(x, y), speed(speed), currentFrame(0), 
+            animationTimer(0.0f), frameDuration(0.05f), sprite(nullptr), owner(owner) { // 50ms per frame = 20 FPS animation
     // Calculate velocity based on angle (in radians)
     // Forward direction in isometric view is top-right (45 degrees or π/4 radians)
     velocity.x = std::cos(angle) * speed;
     velocity.y = std::sin(angle) * speed;
     
     // Ensure texture is loaded
-    if (!texture) {
-        loadTexture();
-    }
     
-    // Create sprite with texture
-    if (texture) {
-        sprite = std::make_unique<sf::Sprite>(*texture);
+    loadTexture();
+    
+    // Create sprite with the appropriate texture for the owner
+    sf::Texture* texPtr = nullptr;
+    if (owner == Owner::Player && texturePlayer) texPtr = texturePlayer.get();
+    if (owner == Owner::Enemy && textureEnemy) texPtr = textureEnemy.get();
+    if (!texPtr && texturePlayer) texPtr = texturePlayer.get();
+
+    if (texPtr) {
+        sprite = std::make_unique<sf::Sprite>(*texPtr);
         
         // Calculate frame size from texture (assuming 2x3 grid)
-        sf::Vector2u texSize = texture->getSize();
+        sf::Vector2u texSize = texPtr->getSize();
         int frameWidth = texSize.x / FRAME_COLS;
         int frameHeight = texSize.y / FRAME_ROWS;
         
@@ -53,10 +70,13 @@ Projectile::Projectile(float x, float y, float angle, float speed)
     }
 }
 
+Projectile::Owner Projectile::getOwner() const { return owner; }
+
 void Projectile::updateSpriteRect() {
-    if (!texture || !sprite) return;
-    
-    sf::Vector2u texSize = texture->getSize();
+    if (!sprite) return;
+
+    const sf::Texture& tex = sprite->getTexture();
+    sf::Vector2u texSize = tex.getSize();
     int frameWidth = texSize.x / FRAME_COLS;
     int frameHeight = texSize.y / FRAME_ROWS;
     

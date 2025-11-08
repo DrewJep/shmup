@@ -6,7 +6,9 @@
 
 class Projectile {
 public:
-    Projectile(float x, float y, float angle, float speed = 500.0f);
+    enum class Owner { Player, Enemy };
+
+    Projectile(float x, float y, float angle, float speed = 500.0f, Owner owner = Owner::Player);
     
     void update(float deltaTime);
     void draw(sf::RenderWindow& window);
@@ -15,6 +17,7 @@ public:
     bool isOffScreen(int screenWidth, int screenHeight) const;
     sf::FloatRect getBounds() const;
     bool checkCollision(const sf::FloatRect& otherBounds) const;
+    Owner getOwner() const;
     
     // Static texture management (shared across all projectiles)
     static bool loadTexture();
@@ -25,8 +28,9 @@ private:
     sf::Vector2f velocity;
     float speed;
     
-    // Animation
-    static std::unique_ptr<sf::Texture> texture;
+    // Animation textures (separate for player and enemy shots)
+    static std::unique_ptr<sf::Texture> texturePlayer;
+    static std::unique_ptr<sf::Texture> textureEnemy;
     static const int FRAME_COLS = 2; // 2 columns in sprite sheet
     static const int FRAME_ROWS = 3; // 3 rows in sprite sheet
     static const int TOTAL_FRAMES = FRAME_COLS * FRAME_ROWS; // 6 frames total
@@ -35,6 +39,7 @@ private:
     int currentFrame;
     float animationTimer;
     float frameDuration; // Time per frame in seconds
+    Owner owner;
     
     void updateAnimation(float deltaTime);
     void updateSpriteRect();

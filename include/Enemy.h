@@ -3,13 +3,19 @@
 
 #include <SFML/Graphics.hpp>
 #include <memory>
+#include <vector>
 #include "Path.h"
+
+// Forward declarations
+class Projectile;
+class ShootingPattern;
 
 class Enemy {
 public:
     Enemy(float x, float y, float speed = 100.0f);
     
-    void update(float deltaTime, int screenWidth, int screenHeight);
+    // Now accepts player position and projectiles list so enemies can spawn bullets
+    void update(float deltaTime, int screenWidth, int screenHeight, const sf::Vector2f& playerPos, std::vector<std::unique_ptr<Projectile>>& projectiles);
     void draw(sf::RenderWindow& window);
     
     sf::Vector2f getPosition() const;
@@ -21,6 +27,8 @@ public:
     // Path movement
     void setPath(std::unique_ptr<Path> p);
     bool hasPath() const;
+    // Shooting pattern
+    void setShootingPattern(std::unique_ptr<ShootingPattern> p);
     
 private:
     sf::Vector2f position;
@@ -44,6 +52,7 @@ private:
     float movementTimer;
     float directionChangeInterval;
     std::unique_ptr<Path> path;
+    std::unique_ptr<ShootingPattern> shooter;
     
     // Internal helpers
     void updateAnimation(float deltaTime);
