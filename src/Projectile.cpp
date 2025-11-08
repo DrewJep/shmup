@@ -64,8 +64,17 @@ Projectile::Projectile(float x, float y, float angle, float speed, Owner owner)
         // Set origin to center of frame
         sprite->setOrigin(sf::Vector2f(frameWidth / 2.0f, frameHeight / 2.0f));
         
-        // No rotation needed - sprite is already oriented correctly (bottom-left to top-right)
-        
+        // Rotate enemy projectile sprite so its "front" (top-right in the PNG) points along velocity.
+        // Compute actual travel direction from velocity to avoid mismatch between passed-in angle and
+        // the final velocity (safer if velocity is modified elsewhere). Subtract 45 degrees because
+        // the artwork's forward direction points to the top-right in the texture.
+        if (owner == Owner::Enemy) {
+            float travelRad = std::atan2(velocity.y, velocity.x);
+            float deg = travelRad * 180.0f / 3.14159265f;
+            sprite->setRotation(sf::degrees(deg - 45.0f));
+        }
+
+        // Position the sprite at the projectile position
         sprite->setPosition(position);
     }
 }
@@ -104,7 +113,14 @@ void Projectile::updateAnimation(float deltaTime) {
 
 void Projectile::update(float deltaTime) {
     position += velocity * deltaTime;
+    // Update sprite position and orientation each frame in case velocity changes
     if (sprite) {
+        // Recompute rotation from current velocity so sprite always faces travel direction
+        if (owner == Owner::Enemy) {
+            float travelRad = std::atan2(velocity.y, velocity.x);
+            float deg = travelRad * 180.0f / 3.14159265f;
+            sprite->setRotation(sf::degrees(deg - 135.0f));
+        }
         sprite->setPosition(position);
     }
     updateAnimation(deltaTime);

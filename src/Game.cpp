@@ -290,7 +290,7 @@ void Game::render() {
     window.draw(hpBg);
 
     // Draw stacked HP segments (top to bottom)
-    int maxHP = 5;
+    int maxHP = 20;
     int hp = playerShip.getHealth();
     float segmentH = (healthPanelH - 8.0f) / static_cast<float>(maxHP);
     for (int i = 0; i < maxHP; ++i) {
