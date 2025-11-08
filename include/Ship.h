@@ -22,6 +22,10 @@ public:
     // Shooting
     bool shouldShoot(); // Returns true when ready to fire (call each frame)
     float getForwardAngle() const; // Get the angle the ship is facing (forward = top-right)
+    // Health
+    int getHealth() const;
+    void takeDamage(int amount);
+    sf::FloatRect getBounds() const;
 
 private:
     sf::Vector2f position;
@@ -31,6 +35,9 @@ private:
     // Sprite representation
     sf::Texture texture;
     std::unique_ptr<sf::Sprite> sprite;
+    
+    // Health
+    int health;
     
     // Helper to load texture
     bool loadTexture();

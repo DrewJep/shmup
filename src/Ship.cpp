@@ -4,9 +4,9 @@
 
 Ship::Ship(float x, float y, float speed)
     : position(x, y), velocity(0, 0), speed(speed), 
-      moveUp(false), moveDown(false), moveLeft(false), moveRight(false),
-      shootPressed(false), fireRate(0.15f), timeSinceLastShot(0.0f),
-      sprite(nullptr) {
+    moveUp(false), moveDown(false), moveLeft(false), moveRight(false),
+    shootPressed(false), fireRate(0.15f), timeSinceLastShot(0.0f),
+    sprite(nullptr), health(2) {
     // Load ship sprite texture
     if (loadTexture()) {
         // Create sprite with loaded texture
@@ -134,5 +134,18 @@ float Ship::getForwardAngle() const {
     // But SFML's Y axis points down, so we need to adjust
     // For isometric forward (top-right), we want approximately -45 degrees
     return -3.14159f / 4.0f; // -45 degrees in radians (top-right direction)
+}
+
+int Ship::getHealth() const {
+    return health;
+}
+
+void Ship::takeDamage(int amount) {
+    health = std::max(0, health - amount);
+}
+
+sf::FloatRect Ship::getBounds() const {
+    if (sprite) return sprite->getGlobalBounds();
+    return sf::FloatRect(position, sf::Vector2f(0.f, 0.f));
 }
 

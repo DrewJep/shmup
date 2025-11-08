@@ -5,19 +5,29 @@
 #include <iostream>
 #include <optional>
 #include <cmath>
+#include <cstdio>
 
 const std::string Game::WINDOW_TITLE = "Isometric Shmup";
 
 Game::Game()
     : window(sf::VideoMode(sf::Vector2u(WINDOW_WIDTH, WINDOW_HEIGHT)), WINDOW_TITLE),
       playerShip(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f, 300.0f),
-      deltaTime(0.0f),
-      isRunning(true) {
+            deltaTime(0.0f),
+            elapsedTime(0.0f),
+            isRunning(true),
+            uiHasFont(false) {
     window.setFramerateLimit(60);
     window.setVerticalSyncEnabled(true);
     
     // Pre-load projectile texture
     Projectile::loadTexture();
+
+    // Attempt to load UI font (optional) - SFML3 uses openFromFile
+    if (uiFont.openFromFile("assets/fonts/Roboto-Regular.ttf")) {
+        uiHasFont = true;
+    } else {
+        uiHasFont = false;
+    }
     
     // Spawn 3 enemies on the right side of the screen that trail each other along a patrol path
     float enemyX = WINDOW_WIDTH * 0.85f;
@@ -52,6 +62,7 @@ Game::~Game() {
 void Game::run() {
     while (isRunning && window.isOpen()) {
         deltaTime = clock.restart().asSeconds();
+        elapsedTime += deltaTime;
         
         processEvents();
         update(deltaTime);
@@ -131,6 +142,23 @@ void Game::update(float deltaTime) {
     
     // Check collisions between projectiles and enemies
     checkCollisions();
+
+    // Check collisions between enemies and player ship
+    for (auto enemyIt = enemies.begin(); enemyIt != enemies.end();) {
+        {
+            // Manual AABB overlap check (SFML 3 removed FloatRect::intersects helper in some configs)
+            sf::FloatRect a = (*enemyIt)->getBounds();
+            sf::FloatRect b = playerShip.getBounds();
+            bool xOverlap = (a.position.x < b.position.x + b.size.x) && (b.position.x < a.position.x + a.size.x);
+            bool yOverlap = (a.position.y < b.position.y + b.size.y) && (b.position.y < a.position.y + a.size.y);
+            if (xOverlap && yOverlap) {
+                // Damage player and enemy (simple rules: both take 1)
+                playerShip.takeDamage(1);
+                (*enemyIt)->takeDamage(1);
+            }
+        }
+        ++enemyIt;
+    }
     
     // Keep ship within screen bounds
     sf::Vector2f pos = playerShip.getPosition();
@@ -140,28 +168,139 @@ void Game::update(float deltaTime) {
     if (pos.x > WINDOW_WIDTH - shipRadius) playerShip.setPosition(WINDOW_WIDTH - shipRadius, pos.y);
     if (pos.y < shipRadius) playerShip.setPosition(pos.x, shipRadius);
     if (pos.y > WINDOW_HEIGHT - shipRadius) playerShip.setPosition(pos.x, WINDOW_HEIGHT - shipRadius);
+
+    // End game if player health is 0
+    if (playerShip.getHealth() <= 0) {
+        isRunning = false;
+        window.close();
+    }
 }
 
 void Game::render() {
     // Clear with a dark background (space-like)
     window.clear(sf::Color(20, 20, 40));
-    
-    // Draw floor first (so objects appear on top)
+
+    // Draw play area borders and UI panels
+    // Define play area as a square using window height (centered horizontally)
+    float playSize = static_cast<float>(WINDOW_HEIGHT);
+    float playLeft = (WINDOW_WIDTH - playSize) / 2.0f;
+    float playTop = 0.0f;
+    float playRight = playLeft + playSize;
+
+    // Side panels thickness
+    float sideWidth = playLeft; // left and right panel width
+
+    // Draw background for panels
+    sf::RectangleShape leftPanel(sf::Vector2f(sideWidth, static_cast<float>(WINDOW_HEIGHT)));
+    leftPanel.setPosition(sf::Vector2f(0.f, 0.f));
+    leftPanel.setFillColor(sf::Color(30, 30, 45));
+    window.draw(leftPanel);
+
+    sf::RectangleShape rightPanel(sf::Vector2f(sideWidth, static_cast<float>(WINDOW_HEIGHT)));
+    rightPanel.setPosition(sf::Vector2f(playRight, 0.f));
+    rightPanel.setFillColor(sf::Color(30, 30, 45));
+    window.draw(rightPanel);
+
+    // Draw play area bg (slightly different color)
+    sf::RectangleShape playArea(sf::Vector2f(playSize, playSize));
+    playArea.setPosition(sf::Vector2f(playLeft, playTop));
+    playArea.setFillColor(sf::Color(18, 18, 34));
+    window.draw(playArea);
+
+    // Save current view and set a view clipped to the play area so drawFloor uses the same screen coords
+    sf::View prevView = window.getView();
+    sf::View playView = prevView;
+    // Keep the same size as the window but translate so (0,0) for drawing maps to playLeft,playTop
+    playView.setViewport(sf::FloatRect(
+        sf::Vector2f(playLeft / static_cast<float>(WINDOW_WIDTH), playTop / static_cast<float>(WINDOW_HEIGHT)),
+        sf::Vector2f(playSize / static_cast<float>(WINDOW_WIDTH), playSize / static_cast<float>(WINDOW_HEIGHT))
+    ));
+    window.setView(playView);
+
+    // Draw floor inside play area
     drawFloor(window);
-    
+
     // Draw projectiles first (so ship appears on top)
     for (const auto& projectile : projectiles) {
         projectile->draw(window);
     }
-    
+
     // Draw enemies
     for (const auto& enemy : enemies) {
         enemy->draw(window);
     }
-    
+
     // Draw ship on top
     playerShip.draw(window);
-    
+
+    // Restore previous view to draw UI elements in screen coordinates
+    window.setView(prevView);
+
+    // Draw UI: health bar (vertical stacked) in left panel
+    float uiMargin = 16.0f;
+    float healthPanelX = uiMargin;
+    float healthPanelY = uiMargin;
+    float healthPanelW = sideWidth - uiMargin * 2.0f;
+    float healthPanelH = 120.0f;
+
+    // Panel background
+    sf::RectangleShape hpBg(sf::Vector2f(healthPanelW, healthPanelH));
+    hpBg.setPosition(sf::Vector2f(healthPanelX, healthPanelY));
+    hpBg.setFillColor(sf::Color(12, 12, 20));
+    hpBg.setOutlineColor(sf::Color(80, 80, 90));
+    hpBg.setOutlineThickness(2.0f);
+    window.draw(hpBg);
+
+    // Draw stacked HP segments (top to bottom)
+    int maxHP = 2;
+    int hp = playerShip.getHealth();
+    float segmentH = (healthPanelH - 8.0f) / static_cast<float>(maxHP);
+    for (int i = 0; i < maxHP; ++i) {
+        float segX = healthPanelX + 4.0f;
+        float segY = healthPanelY + 4.0f + i * segmentH;
+        float segW = healthPanelW - 8.0f;
+        float segH = segmentH - 4.0f;
+
+        sf::RectangleShape seg(sf::Vector2f(segW, segH));
+    seg.setPosition(sf::Vector2f(segX, segY));
+        if (i < hp) {
+            // Filled segment (from top down)
+            seg.setFillColor(sf::Color(200, 30, 30));
+        } else {
+            seg.setFillColor(sf::Color(60, 60, 70));
+        }
+        seg.setOutlineColor(sf::Color(30, 30, 40));
+        seg.setOutlineThickness(1.0f);
+        window.draw(seg);
+    }
+
+    // Draw weapon and time text in right panel (if font loaded)
+    if (uiHasFont) {
+            // Draw simple placeholders for weapon and time in right panel
+            {
+                float infoX = playRight + uiMargin;
+                float infoY = uiMargin;
+                float infoW = sideWidth - uiMargin * 2.0f;
+                float infoH = 28.0f;
+
+                sf::RectangleShape weaponRect(sf::Vector2f(infoW, infoH));
+                weaponRect.setPosition(sf::Vector2f(infoX, infoY));
+                weaponRect.setFillColor(sf::Color(70, 70, 80));
+                weaponRect.setOutlineColor(sf::Color(100, 100, 110));
+                weaponRect.setOutlineThickness(1.0f);
+                window.draw(weaponRect);
+
+                // Time placeholder (draw a small bar whose width is proportional to minutes modulo some value)
+                infoY += infoH + 8.0f;
+                sf::RectangleShape timeRect(sf::Vector2f(infoW, infoH));
+                timeRect.setPosition(sf::Vector2f(infoX, infoY));
+                timeRect.setFillColor(sf::Color(70, 70, 80));
+                timeRect.setOutlineColor(sf::Color(100, 100, 110));
+                timeRect.setOutlineThickness(1.0f);
+                window.draw(timeRect);
+            }
+    }
+
     // Display everything
     window.display();
 }

@@ -41,6 +41,11 @@ private:
     // Timing
     sf::Clock clock;
     float deltaTime;
+    float elapsedTime; // seconds since game start
+
+    // UI
+    sf::Font uiFont;
+    bool uiHasFont;
     
     // Game state
     bool isRunning;
