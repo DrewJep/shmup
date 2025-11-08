@@ -1,6 +1,7 @@
 #include "Enemy.h"
 #include <cmath>
 #include <cstdlib>
+// Path is included via Enemy.h
 
 // Static texture
 std::unique_ptr<sf::Texture> Enemy::texture = nullptr;
@@ -18,7 +19,7 @@ bool Enemy::loadTexture() {
 
 Enemy::Enemy(float x, float y, float speed)
     : position(x, y), speed(speed), health(1), maxHealth(1),
-      movementTimer(0.0f), directionChangeInterval(2.0f),
+    movementTimer(0.0f), directionChangeInterval(1.0f + (std::rand() % 200) / 100.0f),
       currentFrame(0), animationTimer(0.0f), frameDuration(0.08f), sprite(nullptr)
 {
     loadTexture();
@@ -71,9 +72,14 @@ void Enemy::updateAnimation(float deltaTime) {
 }
 
 void Enemy::update(float deltaTime, int screenWidth, int screenHeight) {
+    // If following a path, updateMovement will set position directly.
+    bool followingPath = (path != nullptr);
     updateMovement(deltaTime, screenWidth, screenHeight);
 
-    position += velocity * deltaTime;
+    // Only apply velocity-based movement when not following a path
+    if (!followingPath) {
+        position += velocity * deltaTime;
+    }
 
     if (sprite) {
         sprite->setPosition(position);
@@ -84,6 +90,14 @@ void Enemy::update(float deltaTime, int screenWidth, int screenHeight) {
 }
 
 void Enemy::updateMovement(float deltaTime, int screenWidth, int screenHeight) {
+    // If a path is set, let it control position
+    if (path) {
+        path->update(deltaTime);
+        position = path->getPosition();
+        // Optionally update velocity for visual smoothing
+        return;
+    }
+
     movementTimer += deltaTime;
 
     if (movementTimer >= directionChangeInterval) {
@@ -100,11 +114,25 @@ void Enemy::updateMovement(float deltaTime, int screenWidth, int screenHeight) {
         velocity.y = std::sin(targetAngle) * speed;
     }
 
-    float margin = 50.0f;
-    if (position.x < screenWidth * 0.4f) velocity.x = std::abs(velocity.x);
-    if (position.x > screenWidth - margin) velocity.x = -std::abs(velocity.x);
-    if (position.y < margin) velocity.y = std::abs(velocity.y);
-    if (position.y > screenHeight - margin) velocity.y = -std::abs(velocity.y);
+    // float margin = 50.0f;
+    // if (position.x < screenWidth * 0.4f) velocity.x = std::abs(velocity.x);
+    // if (position.x > screenWidth - margin) velocity.x = -std::abs(velocity.x);
+    // if (position.y < margin) velocity.y = std::abs(velocity.y);
+    // if (position.y > screenHeight - margin) velocity.y = -std::abs(velocity.y);
+}
+
+void Enemy::setPath(std::unique_ptr<Path> p) {
+    path = std::move(p);
+    if (path) {
+        // Ensure path starts from current position unless the path already starts elsewhere
+        path->setStart(position);
+        // When following a path, zero movement velocity so we don't add it each frame
+        velocity = sf::Vector2f(0.f, 0.f);
+    }
+}
+
+bool Enemy::hasPath() const {
+    return path != nullptr && !path->isFinished();
 }
 
 void Enemy::draw(sf::RenderWindow& window) {

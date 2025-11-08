@@ -3,6 +3,7 @@
 
 #include <SFML/Graphics.hpp>
 #include <memory>
+#include "Path.h"
 
 class Enemy {
 public:
@@ -17,6 +18,9 @@ public:
     int getHealth() const;
     void takeDamage(int damage);
     bool isDead() const;
+    // Path movement
+    void setPath(std::unique_ptr<Path> p);
+    bool hasPath() const;
     
 private:
     sf::Vector2f position;
@@ -39,6 +43,7 @@ private:
     // Movement pattern
     float movementTimer;
     float directionChangeInterval;
+    std::unique_ptr<Path> path;
     
     // Internal helpers
     void updateAnimation(float deltaTime);

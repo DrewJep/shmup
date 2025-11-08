@@ -1,6 +1,7 @@
 #include "Game.h"
 #include "IsometricUtils.h"
 #include "Projectile.h"
+#include "Path.h"
 #include <iostream>
 #include <optional>
 #include <cmath>
@@ -18,10 +19,30 @@ Game::Game()
     // Pre-load projectile texture
     Projectile::loadTexture();
     
-    // Spawn 1 enemy on the right side of the screen
-    float enemyX = WINDOW_WIDTH * 0.75f;
+    // Spawn 3 enemies on the right side of the screen that trail each other along a patrol path
+    float enemyX = WINDOW_WIDTH * 0.85f;
     float enemyY = WINDOW_HEIGHT / 2.0f;
-    enemies.push_back(std::make_unique<Enemy>(enemyX, enemyY, 80.0f));
+
+    // Wider patrol that travels across more of the screen in a smooth loop
+    std::vector<sf::Vector2f> patrol = {
+        { WINDOW_WIDTH * 0.85f, WINDOW_HEIGHT * 0.50f },
+        { WINDOW_WIDTH * 0.60f, WINDOW_HEIGHT * 0.25f },
+        { WINDOW_WIDTH * 0.30f, WINDOW_HEIGHT * 0.50f },
+        { WINDOW_WIDTH * 0.60f, WINDOW_HEIGHT * 0.75f }
+    };
+
+    // Create three enemies staggered behind each other along the path
+    const int enemyCount = 3;
+    const float spacing = 40.0f; // pixels to stagger spawn positions
+    for (int i = 0; i < enemyCount; ++i) {
+        float spawnX = enemyX - i * spacing;
+        float spawnY = enemyY;
+        enemies.push_back(std::make_unique<Enemy>(spawnX, spawnY, 80.0f));
+
+        // Each enemy gets its own Path instance so internal position advances separately.
+        auto p = std::make_unique<Path>(patrol, 80.0f, true);
+        enemies.back()->setPath(std::move(p));
+    }
 }
 
 Game::~Game() {
@@ -152,31 +173,31 @@ void Game::drawFloor(sf::RenderWindow& window) {
     sf::VertexArray gridLines(sf::PrimitiveType::Lines);
     sf::Color gridColor(60, 60, 80, 180); // Semi-transparent grid
     
-    // Draw grid lines in isometric space
+    // Draw grid lines in isometric space using tile units (not pixel-multiplied coordinates)
     // We need to cover the visible area with isometric tiles
     int gridWidth = FLOOR_GRID_SIZE;
     int gridHeight = FLOOR_GRID_SIZE;
-    
+
     // Offset to center the grid
     float offsetX = WINDOW_WIDTH / 2.0f;
     float offsetY = WINDOW_HEIGHT / 3.0f; // Position floor in lower portion of screen
-    
-    // Draw vertical lines (going from top-left to bottom-right in isometric view)
+
+    // Draw vertical lines (constant worldX, varying worldY)
     for (int i = -gridWidth; i <= gridWidth; ++i) {
-        float worldX = i * IsometricUtils::TILE_WIDTH;
-        
-        // Top point
-        float worldY1 = -gridHeight * IsometricUtils::TILE_HEIGHT;
+        float worldX = static_cast<float>(i); // tile units
+
+        // Top point (tile units)
+        float worldY1 = static_cast<float>(-gridHeight);
         sf::Vector2f screen1 = IsometricUtils::worldToScreen(worldX, worldY1);
         screen1.x += offsetX;
         screen1.y += offsetY;
-        
-        // Bottom point
-        float worldY2 = gridHeight * IsometricUtils::TILE_HEIGHT;
+
+        // Bottom point (tile units)
+        float worldY2 = static_cast<float>(gridHeight);
         sf::Vector2f screen2 = IsometricUtils::worldToScreen(worldX, worldY2);
         screen2.x += offsetX;
         screen2.y += offsetY;
-        
+
         sf::Vertex v1;
         v1.position = screen1;
         v1.color = gridColor;
@@ -186,23 +207,23 @@ void Game::drawFloor(sf::RenderWindow& window) {
         gridLines.append(v1);
         gridLines.append(v2);
     }
-    
-    // Draw horizontal lines (going from top-right to bottom-left in isometric view)
+
+    // Draw horizontal lines (constant worldY, varying worldX)
     for (int i = -gridHeight; i <= gridHeight; ++i) {
-        float worldY = i * IsometricUtils::TILE_HEIGHT;
-        
+        float worldY = static_cast<float>(i); // tile units
+
         // Left point
-        float worldX1 = -gridWidth * IsometricUtils::TILE_WIDTH;
+        float worldX1 = static_cast<float>(-gridWidth);
         sf::Vector2f screen1 = IsometricUtils::worldToScreen(worldX1, worldY);
         screen1.x += offsetX;
         screen1.y += offsetY;
-        
+
         // Right point
-        float worldX2 = gridWidth * IsometricUtils::TILE_WIDTH;
+        float worldX2 = static_cast<float>(gridWidth);
         sf::Vector2f screen2 = IsometricUtils::worldToScreen(worldX2, worldY);
         screen2.x += offsetX;
         screen2.y += offsetY;
-        
+
         sf::Vertex v1;
         v1.position = screen1;
         v1.color = gridColor;
@@ -221,8 +242,9 @@ void Game::drawFloor(sf::RenderWindow& window) {
     
     for (int x = -gridWidth / 2; x < gridWidth / 2; ++x) {
         for (int y = -gridHeight / 2; y < gridHeight / 2; ++y) {
-            float worldX = x * IsometricUtils::TILE_WIDTH;
-            float worldY = y * IsometricUtils::TILE_HEIGHT;
+            // Use tile-unit coordinates (x,y) rather than multiplying by TILE_WIDTH/TILE_HEIGHT
+            float worldX = static_cast<float>(x);
+            float worldY = static_cast<float>(y);
             
             // Create a diamond shape for each tile
             sf::ConvexShape tile;
@@ -233,23 +255,23 @@ void Game::drawFloor(sf::RenderWindow& window) {
             center.x += offsetX;
             center.y += offsetY;
             
-            // Top corner
-            sf::Vector2f top = IsometricUtils::worldToScreen(worldX, worldY - IsometricUtils::TILE_HEIGHT / 2.0f);
+            // Top corner (half tile up)
+            sf::Vector2f top = IsometricUtils::worldToScreen(worldX, worldY - 0.5f);
             top.x += offsetX;
             top.y += offsetY;
             
-            // Right corner
-            sf::Vector2f right = IsometricUtils::worldToScreen(worldX + IsometricUtils::TILE_WIDTH / 2.0f, worldY);
+            // Right corner (half tile right)
+            sf::Vector2f right = IsometricUtils::worldToScreen(worldX + 0.5f, worldY);
             right.x += offsetX;
             right.y += offsetY;
             
-            // Bottom corner
-            sf::Vector2f bottom = IsometricUtils::worldToScreen(worldX, worldY + IsometricUtils::TILE_HEIGHT / 2.0f);
+            // Bottom corner (half tile down)
+            sf::Vector2f bottom = IsometricUtils::worldToScreen(worldX, worldY + 0.5f);
             bottom.x += offsetX;
             bottom.y += offsetY;
             
-            // Left corner
-            sf::Vector2f left = IsometricUtils::worldToScreen(worldX - IsometricUtils::TILE_WIDTH / 2.0f, worldY);
+            // Left corner (half tile left)
+            sf::Vector2f left = IsometricUtils::worldToScreen(worldX - 0.5f, worldY);
             left.x += offsetX;
             left.y += offsetY;
             
