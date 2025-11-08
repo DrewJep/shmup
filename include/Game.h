@@ -2,7 +2,10 @@
 #define GAME_H
 
 #include <SFML/Graphics.hpp>
+#include <vector>
+#include <memory>
 #include "Ship.h"
+#include "Projectile.h"
 
 class Game {
 public:
@@ -24,6 +27,7 @@ private:
     
     // Game objects
     Ship playerShip;
+    std::vector<std::unique_ptr<Projectile>> projectiles;
     
     // Floor/Grid rendering
     void drawFloor(sf::RenderWindow& window);

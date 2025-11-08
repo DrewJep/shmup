@@ -4,27 +4,37 @@
 
 Ship::Ship(float x, float y, float speed)
     : position(x, y), velocity(0, 0), speed(speed), 
-      moveUp(false), moveDown(false), moveLeft(false), moveRight(false) {
-    // Create a simple triangle shape to represent the ship
-    // This will be replaced with a sprite later
-    // Points top-right (isometric forward direction)
-    shape.setPointCount(3);
-    shape.setPoint(0, sf::Vector2f(15, -15));  // Tip pointing top-right
-    shape.setPoint(1, sf::Vector2f(-10, 10));  // Bottom-left base
-    shape.setPoint(2, sf::Vector2f(5, 10));    // Bottom-right base
-    
-    shape.setFillColor(sf::Color::Cyan);
-    shape.setOutlineColor(sf::Color::White);
-    shape.setOutlineThickness(2.0f);
-    shape.setPosition(position);
+      moveUp(false), moveDown(false), moveLeft(false), moveRight(false),
+      shootPressed(false), fireRate(0.15f), timeSinceLastShot(0.0f),
+      sprite(nullptr) {
+    // Load ship sprite texture
+    if (loadTexture()) {
+        // Create sprite with loaded texture
+        sprite = std::make_unique<sf::Sprite>(texture);
+        
+        // Set origin to center of sprite for proper rotation and positioning
+        sf::FloatRect bounds = sprite->getLocalBounds();
+        sprite->setOrigin(sf::Vector2f(bounds.size.x / 2.0f, bounds.size.y / 2.0f));
+        
+        sprite->setPosition(position);
+    }
+}
+
+bool Ship::loadTexture() {
+    return texture.loadFromFile("assets/characters/ship_nutral.png");
 }
 
 void Ship::update(float deltaTime) {
     // Update position based on velocity
     position += velocity * deltaTime;
     
+    // Update shooting cooldown
+    updateShooting(deltaTime);
+    
     // Note: Bounds checking is handled by the Game class
-    shape.setPosition(position);
+    if (sprite) {
+        sprite->setPosition(position);
+    }
 }
 
 void Ship::handleInput(const sf::Keyboard::Key& key, bool isPressed) {
@@ -44,6 +54,9 @@ void Ship::handleInput(const sf::Keyboard::Key& key, bool isPressed) {
         case sf::Keyboard::Key::D:
         case sf::Keyboard::Key::Right:
             moveRight = isPressed;
+            break;
+        case sf::Keyboard::Key::Space:
+            shootPressed = isPressed; // Track if space is held down
             break;
         default:
             break;
@@ -74,7 +87,9 @@ void Ship::updateMovement() {
 }
 
 void Ship::draw(sf::RenderWindow& window) {
-    window.draw(shape);
+    if (sprite) {
+        window.draw(*sprite);
+    }
 }
 
 sf::Vector2f Ship::getPosition() const {
@@ -84,7 +99,9 @@ sf::Vector2f Ship::getPosition() const {
 void Ship::setPosition(float x, float y) {
     position.x = x;
     position.y = y;
-    shape.setPosition(position);
+    if (sprite) {
+        sprite->setPosition(position);
+    }
 }
 
 float Ship::getSpeed() const {
@@ -93,5 +110,29 @@ float Ship::getSpeed() const {
 
 void Ship::setSpeed(float speed) {
     this->speed = speed;
+}
+
+bool Ship::shouldShoot() {
+    // Can shoot if space is held and cooldown is ready
+    if (shootPressed && timeSinceLastShot >= fireRate) {
+        timeSinceLastShot = 0.0f; // Reset cooldown
+        return true;
+    }
+    return false;
+}
+
+void Ship::updateShooting(float deltaTime) {
+    // Accumulate time since last shot
+    timeSinceLastShot += deltaTime;
+}
+
+float Ship::getForwardAngle() const {
+    // Forward direction in isometric view is top-right (45 degrees = π/4 radians)
+    // In screen coordinates, this is -45 degrees or 315 degrees
+    // But we want it in radians, and top-right in screen space is approximately -π/4
+    // Actually, in standard math coordinates, top-right is -45° = -π/4
+    // But SFML's Y axis points down, so we need to adjust
+    // For isometric forward (top-right), we want approximately -45 degrees
+    return -3.14159f / 4.0f; // -45 degrees in radians (top-right direction)
 }
 

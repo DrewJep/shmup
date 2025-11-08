@@ -1,7 +1,9 @@
 #include "Game.h"
 #include "IsometricUtils.h"
+#include "Projectile.h"
 #include <iostream>
 #include <optional>
+#include <cmath>
 
 const std::string Game::WINDOW_TITLE = "Isometric Shmup";
 
@@ -12,6 +14,9 @@ Game::Game()
       isRunning(true) {
     window.setFramerateLimit(60);
     window.setVerticalSyncEnabled(true);
+    
+    // Pre-load projectile texture
+    Projectile::loadTexture();
 }
 
 Game::~Game() {
@@ -57,8 +62,34 @@ void Game::update(float deltaTime) {
     // Update input state
     playerShip.updateInput();
     
+    // Handle shooting (call shouldShoot each frame - it handles cooldown internally)
+    if (playerShip.shouldShoot()) {
+        sf::Vector2f shipPos = playerShip.getPosition();
+        float angle = playerShip.getForwardAngle();
+        
+        // Spawn projectile slightly forward so it doesn't overlap with ship
+        // Offset by ~30 pixels in the forward direction
+        float offsetDistance = 30.0f;
+        float spawnX = shipPos.x + std::cos(angle) * offsetDistance;
+        float spawnY = shipPos.y + std::sin(angle) * offsetDistance;
+        
+        projectiles.push_back(std::make_unique<Projectile>(spawnX, spawnY, angle));
+    }
+    
     // Update game objects
     playerShip.update(deltaTime);
+    
+    // Update projectiles
+    for (auto it = projectiles.begin(); it != projectiles.end();) {
+        (*it)->update(deltaTime);
+        
+        // Remove projectiles that are off screen
+        if ((*it)->isOffScreen(WINDOW_WIDTH, WINDOW_HEIGHT)) {
+            it = projectiles.erase(it);
+        } else {
+            ++it;
+        }
+    }
     
     // Keep ship within screen bounds
     sf::Vector2f pos = playerShip.getPosition();
@@ -77,7 +108,12 @@ void Game::render() {
     // Draw floor first (so objects appear on top)
     drawFloor(window);
     
-    // Draw game objects
+    // Draw projectiles first (so ship appears on top)
+    for (const auto& projectile : projectiles) {
+        projectile->draw(window);
+    }
+    
+    // Draw ship on top
     playerShip.draw(window);
     
     // Display everything
