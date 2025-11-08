@@ -87,6 +87,18 @@ Game::Game()
             enemies.back()->setShootingPattern(makeDirectAtPlayerPattern(rate, 240.0f, 400.0f, false));
         }
     }
+
+    // Spawn a separate fourth enemy that uses the lingering beam pattern.
+    // This enemy is not part of the patrol path and will sit near the top-right area.
+    {
+        float bx = WINDOW_WIDTH * 0.72f;
+        float by = WINDOW_HEIGHT * 0.22f;
+        auto beamEnemy = std::make_unique<Enemy>(bx, by, 40.0f);
+        // No path set - it will use its simple wandering movement or remain mostly stationary
+        // Give it a lingering beam pattern: interval, warningDuration, beamDuration, projSpeed
+        beamEnemy->setShootingPattern(makeLingeringBeamPattern(8.0f, 1.0f, 2.0f, 0.0f));
+        enemies.push_back(std::move(beamEnemy));
+    }
 }
 
 Game::~Game() {

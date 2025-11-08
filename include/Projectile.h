@@ -8,7 +8,11 @@ class Projectile {
 public:
     enum class Owner { Player, Enemy };
 
-    Projectile(float x, float y, float angle, float speed = 500.0f, Owner owner = Owner::Player);
+    // lifetime: seconds before auto-destroy (negative = use off-screen test)
+    // stretchToLength: if true, sprite will be stretched along X to a large length (useful for beams)
+    // preview: if true, rendering will be thin/semi-transparent to indicate a warning
+    Projectile(float x, float y, float angle, float speed = 500.0f, Owner owner = Owner::Player,
+               float lifetime = -1.0f, bool stretchToLength = false, bool preview = false);
     
     void update(float deltaTime);
     void draw(sf::RenderWindow& window);
@@ -40,6 +44,10 @@ private:
     float animationTimer;
     float frameDuration; // Time per frame in seconds
     Owner owner;
+    // For beams / preview visuals
+    float lifetime; // seconds remaining; negative = not used
+    bool stretchToLength;
+    bool preview;
     
     void updateAnimation(float deltaTime);
     void updateSpriteRect();

@@ -1,5 +1,7 @@
 #include "Projectile.h"
 #include <cmath>
+#include <algorithm>
+#include <iostream>
 
 // Static texture initialization
 std::unique_ptr<sf::Texture> Projectile::texturePlayer = nullptr;
@@ -32,9 +34,10 @@ void Projectile::unloadTexture() {
     textureEnemy.reset();
 }
 
-Projectile::Projectile(float x, float y, float angle, float speed, Owner owner)
-        : position(x, y), speed(speed), currentFrame(0), 
-            animationTimer(0.0f), frameDuration(0.05f), sprite(nullptr), owner(owner) { // 50ms per frame = 20 FPS animation
+Projectile::Projectile(float x, float y, float angle, float speed, Owner owner, float lifetimeIn, bool stretch, bool isPreview)
+    : position(x, y), speed(speed), currentFrame(0), 
+        animationTimer(0.0f), frameDuration(0.05f), sprite(nullptr), owner(owner),
+        lifetime(lifetimeIn), stretchToLength(stretch), preview(isPreview) { // 50ms per frame = 20 FPS animation
     // Calculate velocity based on angle (in radians)
     // Forward direction in isometric view is top-right (45 degrees or π/4 radians)
     velocity.x = std::cos(angle) * speed;
@@ -52,29 +55,51 @@ Projectile::Projectile(float x, float y, float angle, float speed, Owner owner)
 
     if (texPtr) {
         sprite = std::make_unique<sf::Sprite>(*texPtr);
-        
+
         // Calculate frame size from texture (assuming 2x3 grid)
         sf::Vector2u texSize = texPtr->getSize();
         int frameWidth = texSize.x / FRAME_COLS;
         int frameHeight = texSize.y / FRAME_ROWS;
-        
+
         // Set the initial texture rect to first frame
         updateSpriteRect();
-        
-        // Set origin to center of frame
-        sprite->setOrigin(sf::Vector2f(frameWidth / 2.0f, frameHeight / 2.0f));
-        
-        // Rotate enemy projectile sprite so its "front" (top-right in the PNG) points along velocity.
-        // Compute actual travel direction from velocity to avoid mismatch between passed-in angle and
-        // the final velocity (safer if velocity is modified elsewhere). Subtract 45 degrees because
-        // the artwork's forward direction points to the top-right in the texture.
+
+        // Default origin is center of frame for normal shots, but if we're stretching
+        // the sprite to make a beam, set the origin at the left-middle so the beam
+        // extends outward from the enemy position (tail at origin).
+        if (stretchToLength) {
+            sprite->setOrigin(sf::Vector2f(0.0f, frameHeight / 2.0f));
+        } else {
+            sprite->setOrigin(sf::Vector2f(frameWidth / 2.0f, frameHeight / 2.0f));
+        }
+
+        // If requested, stretch the sprite along X so it looks like a beam reaching far
+        if (stretchToLength) {
+            // Choose a long length but cap the scale to avoid extreme values that may crash GPU drivers
+            float targetLength = 1200.0f;
+            float rawScaleX = targetLength / static_cast<float>(frameWidth);
+            float maxScaleX = 20.0f; // avoid insane scaling
+            float scaleX = std::min(rawScaleX, maxScaleX);
+            float scaleY = preview ? 0.25f : 1.0f;
+            sprite->setScale(sf::Vector2f(scaleX, scaleY));
+            if (preview) {
+                sprite->setColor(sf::Color(255, 80, 80, 160));
+            } else {
+                sprite->setColor(sf::Color(255, 180, 60, 220));
+            }
+            // Debug info for beams
+            std::cout << "Projectile: created " << (preview ? "preview" : "beam") << " frameW=" << frameWidth
+                      << " scaleX=" << scaleX << " scaleY=" << scaleY << " lifetime=" << lifetime << std::endl;
+        }
+
+        // Rotate to align with travel direction. The art's nose points to top-right;
+        // use a 135 degree offset so the forward direction aligns visually.
         if (owner == Owner::Enemy) {
             float travelRad = std::atan2(velocity.y, velocity.x);
             float deg = travelRad * 180.0f / 3.14159265f;
-            sprite->setRotation(sf::degrees(deg - 45.0f));
+            sprite->setRotation(sf::degrees(deg - 135.0f));
         }
 
-        // Position the sprite at the projectile position
         sprite->setPosition(position);
     }
 }
@@ -124,6 +149,12 @@ void Projectile::update(float deltaTime) {
         sprite->setPosition(position);
     }
     updateAnimation(deltaTime);
+
+    // Reduce lifetime if used (lifetime < 0 means unused)
+    if (lifetime >= 0.0f) {
+        lifetime -= deltaTime;
+        if (lifetime < 0.0f) lifetime = 0.0f; // clamp to zero to mark expired
+    }
 }
 
 void Projectile::draw(sf::RenderWindow& window) {
@@ -157,6 +188,8 @@ bool Projectile::checkCollision(const sf::FloatRect& otherBounds) const {
 bool Projectile::isOffScreen(int screenWidth, int screenHeight) const {
     // Check if projectile is off screen (with some margin)
     float margin = 50.0f;
+    // If lifetime was specified (>=0) and has expired (==0), treat as off-screen
+    if (lifetime >= 0.0f && lifetime == 0.0f) return true;
     return position.x < -margin || position.x > screenWidth + margin ||
            position.y < -margin || position.y > screenHeight + margin;
 }
