@@ -8,7 +8,7 @@ Ship::Ship(float x, float y, float speed)
     : position(x, y), velocity(0, 0), speed(speed), 
     moveUp(false), moveDown(false), moveLeft(false), moveRight(false),
     shootPressed(false), fireRate(0.15f), timeSinceLastShot(0.0f),
-    sprite(nullptr), health(2) {
+    sprite(nullptr), health(5) {
     // Load ship sprite texture
     if (loadTexture()) {
         // Create sprite with loaded texture

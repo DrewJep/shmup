@@ -28,6 +28,31 @@ Game::Game()
     } else {
         uiHasFont = false;
     }
+
+        // Attempt to load background music from common locations
+        musicLoaded = false;
+        std::vector<std::string> musicPaths = {
+            "assets/sounds/music/test_song.mp3",
+            "assets/sounds/test_song.mp3",
+            "assets/sound/music/test_song.mp3",
+            "assets/sound/test_song.mp3",
+            "assets/music/test_song.mp3",
+        };
+
+        for (const auto& p : musicPaths) {
+            if (backgroundMusic.openFromFile(p)) {
+                musicLoaded = true;
+                std::cout << "Loaded background music: " << p << std::endl;
+                break;
+            }
+        }
+
+        if (musicLoaded) {
+            backgroundMusic.setLooping(true);
+            backgroundMusic.play();
+        } else {
+            std::cout << "Background music not found in expected paths." << std::endl;
+        }
     
     // Spawn 3 enemies on the right side of the screen that trail each other along a patrol path
     float enemyX = WINDOW_WIDTH * 0.85f;
@@ -56,7 +81,10 @@ Game::Game()
 }
 
 Game::~Game() {
-    // Cleanup if needed
+    // Stop music if playing
+    if (musicLoaded) {
+        backgroundMusic.stop();
+    }
 }
 
 void Game::run() {
@@ -252,7 +280,7 @@ void Game::render() {
     window.draw(hpBg);
 
     // Draw stacked HP segments (top to bottom)
-    int maxHP = 2;
+    int maxHP = 5;
     int hp = playerShip.getHealth();
     float segmentH = (healthPanelH - 8.0f) / static_cast<float>(maxHP);
     for (int i = 0; i < maxHP; ++i) {
@@ -262,7 +290,7 @@ void Game::render() {
         float segH = segmentH - 4.0f;
 
         sf::RectangleShape seg(sf::Vector2f(segW, segH));
-    seg.setPosition(sf::Vector2f(segX, segY));
+        seg.setPosition(sf::Vector2f(segX, segY));
         if (i < hp) {
             // Filled segment (from top down)
             seg.setFillColor(sf::Color(200, 30, 30));
@@ -277,14 +305,14 @@ void Game::render() {
     // Draw weapon and time text in right panel (if font loaded)
     if (uiHasFont) {
         // Construct sf::Text using the Font reference (SFML expects Font first)
-        sf::Text weaponText(uiFont, "Weapon: Basic", 16);
+        sf::Text weaponText(uiFont, "Basic", 16);
             weaponText.setFillColor(sf::Color::White);
             weaponText.setPosition(sf::Vector2f(playRight + uiMargin, uiMargin));
             window.draw(weaponText);
 
         char buf[64];
         int seconds = static_cast<int>(elapsedTime);
-        std::snprintf(buf, sizeof(buf), "Time: %02d:%02d", seconds / 60, seconds % 60);
+        std::snprintf(buf, sizeof(buf), "%02d:%02d", seconds / 60, seconds % 60);
         sf::Text timeText(uiFont, buf, 16);
             timeText.setFillColor(sf::Color::White);
             timeText.setPosition(sf::Vector2f(playRight + uiMargin, uiMargin + 28.0f));

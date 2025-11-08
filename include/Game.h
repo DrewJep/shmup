@@ -2,6 +2,7 @@
 #define GAME_H
 
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <vector>
 #include <memory>
 #include "Ship.h"
@@ -46,6 +47,9 @@ private:
     // UI
     sf::Font uiFont;
     bool uiHasFont;
+    // Music
+    sf::Music backgroundMusic;
+    bool musicLoaded;
     
     // Game state
     bool isRunning;
