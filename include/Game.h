@@ -6,6 +6,7 @@
 #include <memory>
 #include "Ship.h"
 #include "Projectile.h"
+#include "Enemy.h"
 
 class Game {
 public:
@@ -28,6 +29,10 @@ private:
     // Game objects
     Ship playerShip;
     std::vector<std::unique_ptr<Projectile>> projectiles;
+    std::vector<std::unique_ptr<Enemy>> enemies;
+    
+    // Collision detection
+    void checkCollisions();
     
     // Floor/Grid rendering
     void drawFloor(sf::RenderWindow& window);

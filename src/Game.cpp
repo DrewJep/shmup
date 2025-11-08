@@ -17,6 +17,11 @@ Game::Game()
     
     // Pre-load projectile texture
     Projectile::loadTexture();
+    
+    // Spawn 1 enemy on the right side of the screen
+    float enemyX = WINDOW_WIDTH * 0.75f;
+    float enemyY = WINDOW_HEIGHT / 2.0f;
+    enemies.push_back(std::make_unique<Enemy>(enemyX, enemyY, 80.0f));
 }
 
 Game::~Game() {
@@ -91,6 +96,21 @@ void Game::update(float deltaTime) {
         }
     }
     
+    // Update enemies
+    for (auto it = enemies.begin(); it != enemies.end();) {
+        (*it)->update(deltaTime, WINDOW_WIDTH, WINDOW_HEIGHT);
+        
+        // Remove dead enemies
+        if ((*it)->isDead()) {
+            it = enemies.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    // Check collisions between projectiles and enemies
+    checkCollisions();
+    
     // Keep ship within screen bounds
     sf::Vector2f pos = playerShip.getPosition();
     float shipRadius = 15.0f;
@@ -111,6 +131,11 @@ void Game::render() {
     // Draw projectiles first (so ship appears on top)
     for (const auto& projectile : projectiles) {
         projectile->draw(window);
+    }
+    
+    // Draw enemies
+    for (const auto& enemy : enemies) {
+        enemy->draw(window);
     }
     
     // Draw ship on top
@@ -238,6 +263,33 @@ void Game::drawFloor(sf::RenderWindow& window) {
             tile.setOutlineThickness(1.0f);
             
             window.draw(tile);
+        }
+    }
+}
+
+void Game::checkCollisions() {
+    // Check each projectile against each enemy
+    for (auto projIt = projectiles.begin(); projIt != projectiles.end();) {
+        bool projectileHit = false;
+        
+        for (auto enemyIt = enemies.begin(); enemyIt != enemies.end();) {
+            if ((*projIt)->checkCollision((*enemyIt)->getBounds())) {
+                // Projectile hit enemy
+                (*enemyIt)->takeDamage(1); // Beams do 1 damage
+                projectileHit = true;
+                
+                // If enemy is dead, it will be removed in the update loop
+                break;
+            } else {
+                ++enemyIt;
+            }
+        }
+        
+        // Remove projectile if it hit an enemy
+        if (projectileHit) {
+            projIt = projectiles.erase(projIt);
+        } else {
+            ++projIt;
         }
     }
 }

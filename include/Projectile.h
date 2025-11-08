@@ -13,6 +13,8 @@ public:
     
     sf::Vector2f getPosition() const;
     bool isOffScreen(int screenWidth, int screenHeight) const;
+    sf::FloatRect getBounds() const;
+    bool checkCollision(const sf::FloatRect& otherBounds) const;
     
     // Static texture management (shared across all projectiles)
     static bool loadTexture();

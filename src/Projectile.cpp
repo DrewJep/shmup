@@ -100,6 +100,24 @@ sf::Vector2f Projectile::getPosition() const {
     return position;
 }
 
+sf::FloatRect Projectile::getBounds() const {
+    if (sprite) {
+        return sprite->getGlobalBounds();
+    }
+    return sf::FloatRect(sf::Vector2f(position.x, position.y), sf::Vector2f(0, 0));
+}
+
+bool Projectile::checkCollision(const sf::FloatRect& otherBounds) const {
+    sf::FloatRect myBounds = getBounds();
+    // Manual intersection check for SFML 3.0
+    // Two rectangles intersect if they overlap in both x and y axes
+    bool xOverlap = (myBounds.position.x < otherBounds.position.x + otherBounds.size.x) &&
+                    (otherBounds.position.x < myBounds.position.x + myBounds.size.x);
+    bool yOverlap = (myBounds.position.y < otherBounds.position.y + otherBounds.size.y) &&
+                    (otherBounds.position.y < myBounds.position.y + myBounds.size.y);
+    return xOverlap && yOverlap;
+}
+
 bool Projectile::isOffScreen(int screenWidth, int screenHeight) const {
     // Check if projectile is off screen (with some margin)
     float margin = 50.0f;
