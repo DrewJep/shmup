@@ -23,7 +23,7 @@ Game::Game()
     Projectile::loadTexture();
 
     // Attempt to load UI font (optional) - SFML3 uses openFromFile
-    if (uiFont.openFromFile("assets/fonts/Roboto-Regular.ttf")) {
+        if (uiFont.openFromFile("assets/fonts/Qager-zrlmw.ttf")) {
         uiHasFont = true;
     } else {
         uiHasFont = false;
@@ -276,29 +276,19 @@ void Game::render() {
 
     // Draw weapon and time text in right panel (if font loaded)
     if (uiHasFont) {
-            // Draw simple placeholders for weapon and time in right panel
-            {
-                float infoX = playRight + uiMargin;
-                float infoY = uiMargin;
-                float infoW = sideWidth - uiMargin * 2.0f;
-                float infoH = 28.0f;
+        // Construct sf::Text using the Font reference (SFML expects Font first)
+        sf::Text weaponText(uiFont, "Weapon: Basic", 16);
+            weaponText.setFillColor(sf::Color::White);
+            weaponText.setPosition(sf::Vector2f(playRight + uiMargin, uiMargin));
+            window.draw(weaponText);
 
-                sf::RectangleShape weaponRect(sf::Vector2f(infoW, infoH));
-                weaponRect.setPosition(sf::Vector2f(infoX, infoY));
-                weaponRect.setFillColor(sf::Color(70, 70, 80));
-                weaponRect.setOutlineColor(sf::Color(100, 100, 110));
-                weaponRect.setOutlineThickness(1.0f);
-                window.draw(weaponRect);
-
-                // Time placeholder (draw a small bar whose width is proportional to minutes modulo some value)
-                infoY += infoH + 8.0f;
-                sf::RectangleShape timeRect(sf::Vector2f(infoW, infoH));
-                timeRect.setPosition(sf::Vector2f(infoX, infoY));
-                timeRect.setFillColor(sf::Color(70, 70, 80));
-                timeRect.setOutlineColor(sf::Color(100, 100, 110));
-                timeRect.setOutlineThickness(1.0f);
-                window.draw(timeRect);
-            }
+        char buf[64];
+        int seconds = static_cast<int>(elapsedTime);
+        std::snprintf(buf, sizeof(buf), "Time: %02d:%02d", seconds / 60, seconds % 60);
+        sf::Text timeText(uiFont, buf, 16);
+            timeText.setFillColor(sf::Color::White);
+            timeText.setPosition(sf::Vector2f(playRight + uiMargin, uiMargin + 28.0f));
+            window.draw(timeText);
     }
 
     // Display everything

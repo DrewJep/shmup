@@ -2,6 +2,8 @@
 #include <SFML/Graphics.hpp>
 #include <cmath>
 
+#include "IsometricUtils.h"
+
 Ship::Ship(float x, float y, float speed)
     : position(x, y), velocity(0, 0), speed(speed), 
     moveUp(false), moveDown(false), moveLeft(false), moveRight(false),
@@ -127,13 +129,11 @@ void Ship::updateShooting(float deltaTime) {
 }
 
 float Ship::getForwardAngle() const {
-    // Forward direction in isometric view is top-right (45 degrees = π/4 radians)
-    // In screen coordinates, this is -45 degrees or 315 degrees
-    // But we want it in radians, and top-right in screen space is approximately -π/4
-    // Actually, in standard math coordinates, top-right is -45° = -π/4
-    // But SFML's Y axis points down, so we need to adjust
-    // For isometric forward (top-right), we want approximately -45 degrees
-    return -3.14159f / 4.0f; // -45 degrees in radians (top-right direction)
+    // Compute forward angle that matches the isometric projection so "forward"
+    // (one tile up in world coordinates) appears visually as top-right on screen.
+    // world vector (0, -1) maps to screen delta: (TILE_WIDTH/2, -TILE_HEIGHT/2)
+    // So angle = atan2(dy, dx) = atan2(-TILE_HEIGHT/2, TILE_WIDTH/2) = -atan2(TILE_HEIGHT, TILE_WIDTH)
+    return -std::atan2(IsometricUtils::TILE_HEIGHT, IsometricUtils::TILE_WIDTH);
 }
 
 int Ship::getHealth() const {
