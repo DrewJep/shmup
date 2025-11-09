@@ -44,6 +44,9 @@ private:
     // Floor/Grid rendering
     void drawFloor(sf::RenderWindow& window);
     static const int FLOOR_GRID_SIZE = 20; // Grid cells across the floor
+    float backgroundScrollX; // Offset for scrolling background (wraps between 0 and TILE_WIDTH)
+    float backgroundScrollY; // Offset for scrolling background (wraps between 0 and TILE_HEIGHT)
+    static constexpr float SCROLL_SPEED = 240.0f; // Pixels per second for background scroll
     
     // Timing
     sf::Clock clock;

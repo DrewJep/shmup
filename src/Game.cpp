@@ -16,9 +16,11 @@ Game::Game()
       playerShip(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f, 300.0f),
             deltaTime(0.0f),
             elapsedTime(0.0f),
-                        isRunning(true),
-                        uiHasFont(false),
-                        currentLevel(1) {
+            backgroundScrollX(0.0f),
+            backgroundScrollY(0.0f),
+            isRunning(true),
+            uiHasFont(false),
+            currentLevel(1) {
     window.setFramerateLimit(60);
     window.setVerticalSyncEnabled(true);
     
@@ -164,6 +166,21 @@ void Game::processEvents() {
 void Game::update(float deltaTime) {
     // Update input state
     playerShip.updateInput();
+    
+    // Scroll background when in air mode
+    if (playerShip.getMode() == Ship::Mode::Air) {
+        // Scroll to the left to create illusion of forward movement
+        backgroundScrollY -= SCROLL_SPEED * .5f * deltaTime;
+        
+        // Wrap scroll position between 0 and TILE_WIDTH/HEIGHT
+        while (backgroundScrollY >= IsometricUtils::TILE_HEIGHT) backgroundScrollY -= IsometricUtils::TILE_HEIGHT;
+        while (backgroundScrollY < 0.0f) backgroundScrollY += IsometricUtils::TILE_HEIGHT;
+        
+        // Add a slight vertical scroll component to enhance the isometric feel
+        backgroundScrollX -= SCROLL_SPEED * deltaTime;
+        while (backgroundScrollX >= IsometricUtils::TILE_WIDTH) backgroundScrollX -= IsometricUtils::TILE_WIDTH;
+        while (backgroundScrollX < 0.0f) backgroundScrollX += IsometricUtils::TILE_WIDTH;
+    }
     
     // Handle shooting (call shouldShoot each frame - it handles cooldown internally)
     if (playerShip.shouldShoot()) {
@@ -433,9 +450,9 @@ void Game::drawFloor(sf::RenderWindow& window) {
     int gridWidth = FLOOR_GRID_SIZE;
     int gridHeight = FLOOR_GRID_SIZE;
 
-    // Offset to center the grid
-    float offsetX = WINDOW_WIDTH / 2.0f;
-    float offsetY = WINDOW_HEIGHT / 3.0f; // Position floor in lower portion of screen
+    // Offset to center the grid and apply scroll offsets
+    float offsetX = WINDOW_WIDTH / 2.0f + backgroundScrollX;
+    float offsetY = WINDOW_HEIGHT / 3.0f - backgroundScrollY; // Position floor in lower portion of screen
 
     // Draw vertical lines (constant worldX, varying worldY)
     for (int i = -gridWidth; i <= gridWidth; ++i) {
@@ -506,27 +523,32 @@ void Game::drawFloor(sf::RenderWindow& window) {
             tile.setPointCount(4);
             
             // Calculate the four corners of the isometric tile
-            sf::Vector2f center = IsometricUtils::worldToScreen(worldX, worldY);
+            // Offset coordinates by scroll position before converting to screen space
+            float scrolledX = worldX;
+            float scrolledY = worldY;
+            
+            // Convert world coordinates to screen space with scroll offsets
+            sf::Vector2f center = IsometricUtils::worldToScreen(scrolledX, scrolledY);
             center.x += offsetX;
             center.y += offsetY;
             
             // Top corner (half tile up)
-            sf::Vector2f top = IsometricUtils::worldToScreen(worldX, worldY - 0.5f);
+            sf::Vector2f top = IsometricUtils::worldToScreen(scrolledX, scrolledY - 0.5f);
             top.x += offsetX;
             top.y += offsetY;
             
             // Right corner (half tile right)
-            sf::Vector2f right = IsometricUtils::worldToScreen(worldX + 0.5f, worldY);
+            sf::Vector2f right = IsometricUtils::worldToScreen(scrolledX + 0.5f, scrolledY);
             right.x += offsetX;
             right.y += offsetY;
             
             // Bottom corner (half tile down)
-            sf::Vector2f bottom = IsometricUtils::worldToScreen(worldX, worldY + 0.5f);
+            sf::Vector2f bottom = IsometricUtils::worldToScreen(scrolledX, scrolledY + 0.5f);
             bottom.x += offsetX;
             bottom.y += offsetY;
             
             // Left corner (half tile left)
-            sf::Vector2f left = IsometricUtils::worldToScreen(worldX - 0.5f, worldY);
+            sf::Vector2f left = IsometricUtils::worldToScreen(scrolledX - 0.5f, scrolledY);
             left.x += offsetX;
             left.y += offsetY;
             
