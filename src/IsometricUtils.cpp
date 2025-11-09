@@ -31,3 +31,18 @@ namespace IsometricUtils {
     }
 }
 
+// Bulk helpers (qualified in IsometricUtils namespace)
+std::vector<sf::Vector2f> IsometricUtils::tilesToWorld(const std::vector<sf::Vector2i>& tiles) {
+    std::vector<sf::Vector2f> out;
+    out.reserve(tiles.size());
+    for (const auto& t : tiles) out.push_back(IsometricUtils::tileToWorld(t.x, t.y));
+    return out;
+}
+
+std::vector<sf::Vector2f> IsometricUtils::tilesToScreen(const std::vector<sf::Vector2i>& tiles) {
+    std::vector<sf::Vector2f> out;
+    out.reserve(tiles.size());
+    for (const auto& t : tiles) out.push_back(IsometricUtils::worldToScreen(IsometricUtils::tileToWorld(t.x, t.y)));
+    return out;
+}
+

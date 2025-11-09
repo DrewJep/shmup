@@ -12,8 +12,12 @@ class Path {
 public:
     Path();
     Path(const std::vector<sf::Vector2f>& waypoints, float speed = 100.0f, bool loop = true);
+    // Construct from tile coordinates (grid integers). Tiles are converted to world positions.
+    Path(const std::vector<sf::Vector2i>& tileWaypoints, float speed = 100.0f, bool loop = true);
 
     void setWaypoints(const std::vector<sf::Vector2f>& waypoints);
+    // Set waypoints using tile grid coordinates (tile centers)
+    void setWaypointsFromTiles(const std::vector<sf::Vector2i>& tileWaypoints);
     void setStart(const sf::Vector2f& startPos);
     void setSpeed(float s);
     void setLoop(bool loop);

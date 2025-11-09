@@ -1,5 +1,6 @@
 #include "Path.h"
 #include <cmath>
+#include "IsometricUtils.h"
 
 Path::Path()
     : m_targetIndex(0), m_position(0.f, 0.f), m_speed(100.f), m_loop(true), m_finished(true) {}
@@ -15,8 +16,34 @@ Path::Path(const std::vector<sf::Vector2f>& waypoints, float speed, bool loop)
     }
 }
 
+Path::Path(const std::vector<sf::Vector2i>& tileWaypoints, float speed, bool loop)
+    : m_waypoints(), m_targetIndex(0), m_position(0.f,0.f), m_speed(speed), m_loop(loop), m_finished(false)
+{
+    // Convert tile coordinates (integers) to world positions using IsometricUtils
+    m_waypoints.reserve(tileWaypoints.size());
+    for (const auto& t : tileWaypoints) {
+        m_waypoints.push_back(IsometricUtils::tileToWorld(t));
+    }
+
+    if (!m_waypoints.empty()) {
+        m_position = m_waypoints.front();
+        m_targetIndex = 1 % m_waypoints.size();
+    } else {
+        m_finished = true;
+    }
+}
+
 void Path::setWaypoints(const std::vector<sf::Vector2f>& waypoints) {
     m_waypoints = waypoints;
+    reset();
+}
+
+void Path::setWaypointsFromTiles(const std::vector<sf::Vector2i>& tileWaypoints) {
+    m_waypoints.clear();
+    m_waypoints.reserve(tileWaypoints.size());
+    for (const auto& t : tileWaypoints) {
+        m_waypoints.push_back(IsometricUtils::tileToWorld(t));
+    }
     reset();
 }
 
