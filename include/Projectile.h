@@ -48,6 +48,8 @@ private:
     float lifetime; // seconds remaining; negative = not used
     bool stretchToLength;
     bool preview;
+    // When stretchToLength is true we render a RectangleShape beam instead of a stretched sprite
+    std::unique_ptr<sf::RectangleShape> beamShape;
     
     void updateAnimation(float deltaTime);
     void updateSpriteRect();

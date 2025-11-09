@@ -96,15 +96,23 @@ Game::Game()
         auto beamEnemy = std::make_unique<Enemy>(bx, by, 40.0f);
         // No path set - it will use its simple wandering movement or remain mostly stationary
         // Give it a lingering beam pattern: interval, warningDuration, beamDuration, projSpeed
-        beamEnemy->setShootingPattern(makeLingeringBeamPattern(8.0f, 1.0f, 2.0f, 0.0f));
+    // Use a simple direct-at-player pattern instead of the lingering beam
+    beamEnemy->setShootingPattern(makeDirectAtPlayerPattern(2.0f, 180.0f, 800.0f, true));
         enemies.push_back(std::move(beamEnemy));
     }
 }
 
 Game::~Game() {
-    // Stop music if playing
-    if (musicLoaded) {
-        backgroundMusic.stop();
+    // Stop music if playing. Wrap in try/catch to avoid exceptions escaping destructor
+    try {
+        if (musicLoaded) {
+            backgroundMusic.stop();
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "Exception in Game::~Game(): " << ex.what() << std::endl;
+        // swallow: do not rethrow from destructor
+    } catch (...) {
+        std::cerr << "Unknown exception in Game::~Game()" << std::endl;
     }
 }
 
@@ -229,6 +237,16 @@ void Game::update(float deltaTime) {
 void Game::render() {
     // Clear with a dark background (space-like)
     window.clear(sf::Color(20, 20, 40));
+
+    // One-time diagnostic print to help debug drawing issues
+    static bool debugPrinted = false;
+    if (!debugPrinted) {
+        debugPrinted = true;
+        std::cout << "Render diagnostic: projectiles=" << projectiles.size()
+                  << " enemies=" << enemies.size()
+                  << " playerPos=(" << playerShip.getPosition().x << "," << playerShip.getPosition().y << ")"
+                  << " musicLoaded=" << musicLoaded << std::endl;
+    }
 
     // Draw play area borders and UI panels
     // Define play area as a square using window height (centered horizontally)

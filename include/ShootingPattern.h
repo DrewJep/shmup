@@ -23,6 +23,6 @@ public:
 std::unique_ptr<ShootingPattern> makeDirectAtPlayerPattern(float fireRate = 1.0f, float projSpeed = 220.0f, float activeRadius = 400.0f, bool always = false);
 std::unique_ptr<ShootingPattern> makeRadialPattern(int count = 8, float interval = 2.0f, float projSpeed = 160.0f);
 // Lingering beam: shows a thin preview for warningDuration seconds, then fires a stretched beam for beamDuration seconds
-std::unique_ptr<ShootingPattern> makeLingeringBeamPattern(float interval = 6.0f, float warningDuration = 1.0f, float beamDuration = 2.0f, float projSpeed = 0.0f);
+// (Lingering-beam pattern removed)
 
 #endif // SHOOTING_PATTERN_H

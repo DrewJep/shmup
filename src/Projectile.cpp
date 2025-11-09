@@ -53,7 +53,28 @@ Projectile::Projectile(float x, float y, float angle, float speed, Owner owner, 
     if (owner == Owner::Enemy && textureEnemy) texPtr = textureEnemy.get();
     if (!texPtr && texturePlayer) texPtr = texturePlayer.get();
 
-    if (texPtr) {
+    // If this projectile is a beam (stretchToLength) we render it as a RectangleShape
+    if (stretchToLength) {
+        // Create a long rectangle for the beam instead of stretching a sprite. This avoids extreme sprite scaling.
+        float beamLength = 2000.0f; // long enough to cross typical screens
+        float thickness = preview ? 2.0f : 10.0f; // thin preview vs thicker beam
+
+        beamShape = std::make_unique<sf::RectangleShape>(sf::Vector2f(beamLength, thickness));
+    beamShape->setOrigin(sf::Vector2f(0.0f, thickness / 2.0f)); // start at left-middle so beam originates at enemy
+        beamShape->setPosition(position);
+
+        // Rotation: use the provided angle (radians) converted to degrees
+        float deg = angle * 180.0f / 3.14159265f;
+    beamShape->setRotation(sf::degrees(deg));
+
+        // Color/tint: preview is thin and semi-transparent
+        if (preview) {
+            beamShape->setFillColor(sf::Color(255, 40, 40, 140));
+        } else {
+            beamShape->setFillColor(sf::Color(255, 30, 30, 220));
+        }
+    } else if (texPtr) {
+        // Regular sprite-based projectile
         sprite = std::make_unique<sf::Sprite>(*texPtr);
 
         // Calculate frame size from texture (assuming 2x3 grid)
@@ -64,36 +85,11 @@ Projectile::Projectile(float x, float y, float angle, float speed, Owner owner, 
         // Set the initial texture rect to first frame
         updateSpriteRect();
 
-        // Default origin is center of frame for normal shots, but if we're stretching
-        // the sprite to make a beam, set the origin at the left-middle so the beam
-        // extends outward from the enemy position (tail at origin).
-        if (stretchToLength) {
-            sprite->setOrigin(sf::Vector2f(0.0f, frameHeight / 2.0f));
-        } else {
-            sprite->setOrigin(sf::Vector2f(frameWidth / 2.0f, frameHeight / 2.0f));
-        }
-
-        // If requested, stretch the sprite along X so it looks like a beam reaching far
-        if (stretchToLength) {
-            // Choose a long length but cap the scale to avoid extreme values that may crash GPU drivers
-            float targetLength = 1200.0f;
-            float rawScaleX = targetLength / static_cast<float>(frameWidth);
-            float maxScaleX = 20.0f; // avoid insane scaling
-            float scaleX = std::min(rawScaleX, maxScaleX);
-            float scaleY = preview ? 0.25f : 1.0f;
-            sprite->setScale(sf::Vector2f(scaleX, scaleY));
-            if (preview) {
-                sprite->setColor(sf::Color(255, 80, 80, 160));
-            } else {
-                sprite->setColor(sf::Color(255, 180, 60, 220));
-            }
-            // Debug info for beams
-            std::cout << "Projectile: created " << (preview ? "preview" : "beam") << " frameW=" << frameWidth
-                      << " scaleX=" << scaleX << " scaleY=" << scaleY << " lifetime=" << lifetime << std::endl;
-        }
+        // Origin center of frame for normal shots
+        sprite->setOrigin(sf::Vector2f(frameWidth / 2.0f, frameHeight / 2.0f));
 
         // Rotate to align with travel direction. The art's nose points to top-right;
-        // use a 135 degree offset so the forward direction aligns visually.
+        // use a 135 degree offset so the forward direction aligns visually for enemy shots.
         if (owner == Owner::Enemy) {
             float travelRad = std::atan2(velocity.y, velocity.x);
             float deg = travelRad * 180.0f / 3.14159265f;
@@ -138,9 +134,14 @@ void Projectile::updateAnimation(float deltaTime) {
 
 void Projectile::update(float deltaTime) {
     position += velocity * deltaTime;
-    // Update sprite position and orientation each frame in case velocity changes
+    // Update beam shape position if present (beams stay anchored at creation position but
+    // still respect any non-zero velocity if used)
+    if (beamShape) {
+        beamShape->setPosition(position);
+        // rotation stays as initialized (do not continuously rotate beams)
+    }
+    // Update sprite position/rotation for normal projectiles
     if (sprite) {
-        // Recompute rotation from current velocity so sprite always faces travel direction
         if (owner == Owner::Enemy) {
             float travelRad = std::atan2(velocity.y, velocity.x);
             float deg = travelRad * 180.0f / 3.14159265f;
@@ -158,6 +159,10 @@ void Projectile::update(float deltaTime) {
 }
 
 void Projectile::draw(sf::RenderWindow& window) {
+    if (beamShape) {
+        window.draw(*beamShape);
+        return;
+    }
     if (sprite) {
         window.draw(*sprite);
     }
@@ -168,6 +173,9 @@ sf::Vector2f Projectile::getPosition() const {
 }
 
 sf::FloatRect Projectile::getBounds() const {
+    if (beamShape) {
+        return beamShape->getGlobalBounds();
+    }
     if (sprite) {
         return sprite->getGlobalBounds();
     }
