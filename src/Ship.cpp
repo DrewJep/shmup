@@ -2,6 +2,8 @@
 #include <SFML/Graphics.hpp>
 #include <cmath>
 
+#include <iostream>
+
 #include "IsometricUtils.h"
 
 Ship::Ship(float x, float y, float speed)
@@ -22,8 +24,24 @@ Ship::Ship(float x, float y, float speed)
     }
 }
 
+Ship::Mode Ship::getMode() const {
+    // Placeholder: always return Air for now. Later gameplay can change this.
+    return Mode::Air;
+}
+
 bool Ship::loadTexture() {
-    return texture.loadFromFile("assets/characters/ship_nutral.png");
+    // Prefer new player sprite if present, fall back to the older character sprite
+    const std::vector<std::string> candidates = {
+        "assets/characters/player/player_sky.png"
+    };
+
+    for (const auto &p : candidates) {
+        if (texture.loadFromFile(p)) {
+            std::cout << "Loaded ship texture: " << p << std::endl;
+            return true;
+        }
+    }
+    return false;
 }
 
 void Ship::update(float deltaTime) {

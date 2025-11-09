@@ -26,6 +26,9 @@ public:
     int getHealth() const;
     void takeDamage(int amount);
     sf::FloatRect getBounds() const;
+    // Mode: Air or Ground (placeholder for later gameplay logic)
+    enum class Mode { Air, Ground };
+    Mode getMode() const;
 
 private:
     sf::Vector2f position;

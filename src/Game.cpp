@@ -7,6 +7,7 @@
 #include <optional>
 #include <cmath>
 #include <cstdio>
+#include <SFML/Graphics/RenderTexture.hpp>
 
 const std::string Game::WINDOW_TITLE = "Isometric Shmup";
 
@@ -15,8 +16,9 @@ Game::Game()
       playerShip(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f, 300.0f),
             deltaTime(0.0f),
             elapsedTime(0.0f),
-            isRunning(true),
-            uiHasFont(false) {
+                        isRunning(true),
+                        uiHasFont(false),
+                        currentLevel(1) {
     window.setFramerateLimit(60);
     window.setVerticalSyncEnabled(true);
     
@@ -101,6 +103,10 @@ Game::Game()
         enemies.push_back(std::move(beamEnemy));
     }
 }
+
+// Create a render texture for the retro playfield if desired. We create it lazily
+// at first render to avoid early GPU allocation issues on some systems.
+
 
 Game::~Game() {
     // Stop music if playing. Wrap in try/catch to avoid exceptions escaping destructor
@@ -249,11 +255,15 @@ void Game::render() {
     }
 
     // Draw play area borders and UI panels
-    // Define play area as a square using window height (centered horizontally)
-    float playSize = static_cast<float>(WINDOW_HEIGHT);
-    float playLeft = (WINDOW_WIDTH - playSize) / 2.0f;
-    float playTop = 0.0f;
-    float playRight = playLeft + playSize;
+    // Compute an integer scale for the retro play area so it scales crisply.
+    int scale = std::min(WINDOW_WIDTH / PLAY_WIDTH, WINDOW_HEIGHT / PLAY_HEIGHT);
+    if (scale < 1) scale = 1;
+    float playWidth = static_cast<float>(PLAY_WIDTH * scale);
+    float playHeight = static_cast<float>(PLAY_HEIGHT * scale);
+    float playLeft = (WINDOW_WIDTH - playWidth) / 2.0f;
+    // Center vertically as well so the playfield feels like a centered arcade viewport
+    float playTop = (WINDOW_HEIGHT - playHeight) / 2.0f;
+    float playRight = playLeft + playWidth;
 
     // Side panels thickness
     float sideWidth = playLeft; // left and right panel width
@@ -270,18 +280,27 @@ void Game::render() {
     window.draw(rightPanel);
 
     // Draw play area bg (slightly different color)
-    sf::RectangleShape playArea(sf::Vector2f(playSize, playSize));
+    sf::RectangleShape playArea(sf::Vector2f(playWidth, playHeight));
     playArea.setPosition(sf::Vector2f(playLeft, playTop));
     playArea.setFillColor(sf::Color(18, 18, 34));
     window.draw(playArea);
 
+    // Draw thin top bar for HUD (time, level)
+    float topBarH = 28.0f;
+    sf::RectangleShape topBar(sf::Vector2f(static_cast<float>(WINDOW_WIDTH), topBarH));
+    topBar.setPosition(sf::Vector2f(0.f, 0.f));
+    topBar.setFillColor(sf::Color(25, 25, 40));
+    topBar.setOutlineColor(sf::Color(80, 80, 90));
+    topBar.setOutlineThickness(1.0f);
+    window.draw(topBar);
+
     // Save current view and set a view clipped to the play area so drawFloor uses the same screen coords
     sf::View prevView = window.getView();
     sf::View playView = prevView;
-    // Keep the same size as the window but translate so (0,0) for drawing maps to playLeft,playTop
+    // Keep the same size as the window view but translate so (0,0) for drawing maps to the play area
     playView.setViewport(sf::FloatRect(
         sf::Vector2f(playLeft / static_cast<float>(WINDOW_WIDTH), playTop / static_cast<float>(WINDOW_HEIGHT)),
-        sf::Vector2f(playSize / static_cast<float>(WINDOW_WIDTH), playSize / static_cast<float>(WINDOW_HEIGHT))
+        sf::Vector2f(playWidth / static_cast<float>(WINDOW_WIDTH), playHeight / static_cast<float>(WINDOW_HEIGHT))
     ));
     window.setView(playView);
 
@@ -342,21 +361,57 @@ void Game::render() {
         window.draw(seg);
     }
 
-    // Draw weapon and time text in right panel (if font loaded)
+    // Draw ship mode below the HP panel
     if (uiHasFont) {
-        // Construct sf::Text using the Font reference (SFML expects Font first)
-        sf::Text weaponText(uiFont, "Basic", 16);
-            weaponText.setFillColor(sf::Color::White);
-            weaponText.setPosition(sf::Vector2f(playRight + uiMargin, uiMargin));
-            window.draw(weaponText);
+        std::string modeStr = (playerShip.getMode() == Ship::Mode::Air) ? "MODE: AIR" : "MODE: GROUND";
+        sf::Text modeText(uiFont, modeStr, 14);
+        modeText.setFillColor(sf::Color::White);
+        modeText.setPosition(sf::Vector2f(healthPanelX, healthPanelY + healthPanelH + 8.0f));
+        window.draw(modeText);
+    }
 
+    // Right panel: show weapon slots (primary, special, defense) and top bar shows time/level
+    if (uiHasFont) {
+        // Weapons stacked vertically on the right panel
+        float weaponX = playRight + uiMargin;
+        float weaponY = uiMargin;
+        float iconW = healthPanelW;
+        float iconH = 28.0f;
+
+        auto drawWeapon = [&](const std::string &name, const sf::Color &col, float yOff) {
+            sf::RectangleShape icon(sf::Vector2f(iconW, iconH));
+            icon.setPosition(sf::Vector2f(weaponX, weaponY + yOff));
+            icon.setFillColor(col);
+            icon.setOutlineColor(sf::Color(30, 30, 40));
+            icon.setOutlineThickness(1.0f);
+            window.draw(icon);
+
+            sf::Text t(uiFont, name, 14);
+            t.setFillColor(sf::Color::White);
+            t.setPosition(sf::Vector2f(weaponX + 6.0f, weaponY + yOff + 6.0f));
+            window.draw(t);
+        };
+
+        drawWeapon("Primary", sf::Color(160,160,200), 0.0f);
+        drawWeapon("Special", sf::Color(200,160,160), iconH + 6.0f);
+        drawWeapon("Defense", sf::Color(160,200,160), 2*(iconH + 6.0f));
+
+        // Draw time and level on the top bar
         char buf[64];
         int seconds = static_cast<int>(elapsedTime);
         std::snprintf(buf, sizeof(buf), "%02d:%02d", seconds / 60, seconds % 60);
-        sf::Text timeText(uiFont, buf, 16);
-            timeText.setFillColor(sf::Color::White);
-            timeText.setPosition(sf::Vector2f(playRight + uiMargin, uiMargin + 28.0f));
-            window.draw(timeText);
+        sf::Text timeText(uiFont, buf, 14);
+        timeText.setFillColor(sf::Color::White);
+        timeText.setPosition(sf::Vector2f(playLeft + 8.0f, 4.0f));
+        window.draw(timeText);
+
+        char buf2[32];
+        std::snprintf(buf2, sizeof(buf2), "Level %d", currentLevel);
+        sf::Text levelText(uiFont, buf2, 14);
+        levelText.setFillColor(sf::Color::White);
+        // Right-align level text on top bar
+        levelText.setPosition(sf::Vector2f(playRight - 80.0f, 4.0f));
+        window.draw(levelText);
     }
 
     // Display everything

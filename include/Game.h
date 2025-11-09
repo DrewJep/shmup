@@ -23,8 +23,14 @@ private:
     
     // Window
     sf::RenderWindow window;
-    static const int WINDOW_WIDTH = 800;
-    static const int WINDOW_HEIGHT = 600;
+    // Size of the in-game play area (classic 16-bit feel). Use SNES-like resolution.
+    // We'll default to 320x224 (width x height).
+    static const int PLAY_WIDTH = 320;
+    static const int PLAY_HEIGHT = 224;
+    // Make the window an integer scale of the retro play area so borders are small.
+    // Default to 2x scale of 320x224 -> 640x448 which is close to classic CRT sizes.
+    static const int WINDOW_WIDTH = PLAY_WIDTH * 2; // 640
+    static const int WINDOW_HEIGHT = PLAY_HEIGHT * 2; // 448
     static const std::string WINDOW_TITLE;
     
     // Game objects
@@ -53,6 +59,7 @@ private:
     
     // Game state
     bool isRunning;
+    int currentLevel;
 };
 
 #endif // GAME_H
