@@ -29,6 +29,21 @@ public:
     // Mode: Air or Ground (placeholder for later gameplay logic)
     enum class Mode { Air, Ground };
     Mode getMode() const;
+    // Facing directions for ground (8-way)
+    enum class Facing {
+        Right,
+        DownRight,
+        Down,
+        DownLeft,
+        Left,
+        UpLeft,
+        Up,
+        UpRight
+    };
+
+    // For ground mode controls: update facing via input (IJKL keys)
+    void handleAimInput(const sf::Keyboard::Key& key, bool isPressed);
+    Facing getFacing() const;
 
 private:
     sf::Vector2f position;
@@ -38,6 +53,28 @@ private:
     // Sprite representation
     sf::Texture texture;
     std::unique_ptr<sf::Sprite> sprite;
+    // Ground-mode sprite sheets (diagonal down, straight down, diagonal up)
+    sf::Texture groundTexDownDiag;
+    sf::Texture groundTexStraight;
+    sf::Texture groundTexUpDiag;
+
+    // Ground-mode animation state
+    int groundCurrentFrame;
+    float groundAnimTimer;
+    float groundFrameDuration;
+    // Ground sprites are provided as 2 columns x 3 rows (each frame 32x32 in the assets)
+    static const int GROUND_FRAME_COLS = 2;
+    static const int GROUND_FRAME_ROWS = 3;
+    static const int GROUND_TOTAL_FRAMES = GROUND_FRAME_COLS * GROUND_FRAME_ROWS;
+
+    // Mode and facing
+    Mode mode;
+    Facing facing;
+    // Aim keys state for twin-stick aiming (IJKL)
+    bool aimUp;
+    bool aimDown;
+    bool aimLeft;
+    bool aimRight;
     
     // Health
     int health;

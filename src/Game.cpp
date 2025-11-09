@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <SFML/Graphics/RenderTexture.hpp>
 
-const std::string Game::WINDOW_TITLE = "Isometric Shmup";
+const std::string Game::WINDOW_TITLE = "Down to Earth: A Shmup With Legs";
 
 Game::Game()
     : window(sf::VideoMode(sf::Vector2u(WINDOW_WIDTH, WINDOW_HEIGHT)), WINDOW_TITLE),
@@ -144,6 +144,8 @@ void Game::processEvents() {
         // Handle key press events
         if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
             playerShip.handleInput(keyPressed->code, true);
+            // Forward aim keys (IJKL) to ship for twin-stick ground mode aiming
+            playerShip.handleAimInput(keyPressed->code, true);
             
             if (keyPressed->code == sf::Keyboard::Key::Escape) {
                 window.close();
@@ -154,6 +156,7 @@ void Game::processEvents() {
         // Handle key release events
         if (const auto* keyReleased = event->getIf<sf::Event::KeyReleased>()) {
             playerShip.handleInput(keyReleased->code, false);
+            playerShip.handleAimInput(keyReleased->code, false);
         }
     }
 }

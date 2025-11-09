@@ -36,6 +36,7 @@ Makefile
 *.pdb
 
 # Temporary files
+tmp/
 *.tmp
 *.bak
 *.log
