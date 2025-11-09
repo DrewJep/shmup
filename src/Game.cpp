@@ -285,7 +285,7 @@ void Game::render() {
     // Draw play area bg (slightly different color)
     sf::RectangleShape playArea(sf::Vector2f(playWidth, playHeight));
     playArea.setPosition(sf::Vector2f(playLeft, playTop));
-    playArea.setFillColor(sf::Color(18, 18, 34));
+    playArea.setFillColor(sf::Color(124, 252, 0));
     window.draw(playArea);
 
     // Draw thin top bar for HUD (time, level)
