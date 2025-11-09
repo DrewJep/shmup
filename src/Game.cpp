@@ -197,6 +197,7 @@ void Game::update(float deltaTime) {
     }
     
     // Update game objects
+    playerShip.updateMouseAim(window); // Update facing based on mouse position
     playerShip.update(deltaTime);
     
     // Update projectiles

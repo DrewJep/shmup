@@ -41,8 +41,10 @@ public:
         UpRight
     };
 
-    // For ground mode controls: update facing via input (IJKL keys)
+    // For ground mode controls: update facing via input (IJKL keys or mouse)
     void handleAimInput(const sf::Keyboard::Key& key, bool isPressed);
+    void updateMouseAim(const sf::RenderWindow& window);
+    void setFacingFromAngle(float angle);
     Facing getFacing() const;
 
 private:

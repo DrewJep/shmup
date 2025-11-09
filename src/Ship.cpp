@@ -31,6 +31,12 @@ Ship::Facing Ship::getFacing() const {
 }
 
 void Ship::handleAimInput(const sf::Keyboard::Key& key, bool isPressed) {
+    // Store the previous state to detect if we need to recompute facing
+    bool prevUp = aimUp;
+    bool prevDown = aimDown;
+    bool prevLeft = aimLeft;
+    bool prevRight = aimRight;
+
     // IJKL mapping: I = up, K = down, J = left, L = right
     switch (key) {
         case sf::Keyboard::Key::I:
@@ -45,9 +51,8 @@ void Ship::handleAimInput(const sf::Keyboard::Key& key, bool isPressed) {
             break;
     }
 
-    // Only update facing if there's active input (this makes horizontal aim persist)
-    if (aimUp || aimDown || aimLeft || aimRight) {
-        // Compute facing from aim booleans (priority: diagonal when two keys pressed)
+    // Update facing only if aim state actually changed
+    if (prevUp != aimUp || prevDown != aimDown || prevLeft != aimLeft || prevRight != aimRight) {
         if (aimUp && aimRight) facing = Facing::UpRight;
         else if (aimUp && aimLeft) facing = Facing::UpLeft;
         else if (aimDown && aimRight) facing = Facing::DownRight;
@@ -56,8 +61,8 @@ void Ship::handleAimInput(const sf::Keyboard::Key& key, bool isPressed) {
         else if (aimDown) facing = Facing::Down;
         else if (aimRight) facing = Facing::Right;
         else if (aimLeft) facing = Facing::Left;
+        // When all keys are released, facing remains at its last value
     }
-    // When no aim keys are pressed, the previous facing is maintained
 }
 
 Ship::Mode Ship::getMode() const {
@@ -95,6 +100,8 @@ void Ship::update(float deltaTime) {
     
     // Update shooting cooldown
     updateShooting(deltaTime);
+    
+    // Note: updateMouseAim is called from Game class since we need the window
     
     // Note: Bounds checking is handled by the Game class
     if (sprite) {
@@ -194,6 +201,40 @@ void Ship::handleInput(const sf::Keyboard::Key& key, bool isPressed) {
 
 void Ship::updateInput() {
     updateMovement();
+}
+
+void Ship::updateMouseAim(const sf::RenderWindow& window) {
+    if (mode != Mode::Ground) return;
+
+    // Get mouse position in window coordinates
+    sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+    sf::Vector2f mouseWorldPos = window.mapPixelToCoords(mousePos);
+
+    // Calculate angle between ship and mouse
+    float dx = mouseWorldPos.x - position.x;
+    float dy = mouseWorldPos.y - position.y;
+    float angle = std::atan2(dy, dx);
+
+    setFacingFromAngle(angle);
+}
+
+void Ship::setFacingFromAngle(float angle) {
+    // Convert angle to degrees for easier comparison
+    float degrees = angle * 180.0f / M_PI;
+    // Normalize to 0-360 range
+    while (degrees < 0) degrees += 360.0f;
+    while (degrees >= 360.0f) degrees -= 360.0f;
+
+    // Map angle to 8-way direction
+    // Each direction covers a 45-degree arc
+    if (degrees >= 337.5f || degrees < 22.5f) facing = Facing::Right;
+    else if (degrees >= 22.5f && degrees < 67.5f) facing = Facing::DownRight;
+    else if (degrees >= 67.5f && degrees < 112.5f) facing = Facing::Down;
+    else if (degrees >= 112.5f && degrees < 157.5f) facing = Facing::DownLeft;
+    else if (degrees >= 157.5f && degrees < 202.5f) facing = Facing::Left;
+    else if (degrees >= 202.5f && degrees < 247.5f) facing = Facing::UpLeft;
+    else if (degrees >= 247.5f && degrees < 292.5f) facing = Facing::Up;
+    else if (degrees >= 292.5f && degrees < 337.5f) facing = Facing::UpRight;
 }
 
 void Ship::updateMovement() {
