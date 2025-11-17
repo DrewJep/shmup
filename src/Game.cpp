@@ -45,6 +45,13 @@ static std::unique_ptr<Path> makePathFor(int pathId, const std::string& start) {
 
 // spawn helper
 static void spawnFromSpec(std::vector<std::unique_ptr<Enemy>>& enemies, const EnemySpec& spec) {
+    // Debug: log spawnFromSpec calls
+    std::cout << "spawnFromSpec: spawning -> hp=" << spec.hp
+              << " type='" << spec.type << "'"
+              << " shot=" << spec.shot
+              << " path=" << spec.path
+              << " start='" << spec.start << "'\n";
+
     float x = Game::windowWidth() * 0.5f;
     float y = Game::windowHeight() * 0.5f;
     if (spec.start == "left") x = Game::windowWidth() * 0.12f;
@@ -124,6 +131,19 @@ Game::Game()
         std::cout << "No level script found or failed to parse." << std::endl;
     }
 
+    // If the first event is a spawn, consume it immediately so the level controls initial enemies.
+    if (levelScript.hasNext()) {
+        const LevelEvent* peekEv = levelScript.peek();
+        if (peekEv && peekEv->kind == LevelEvent::Kind::Spawn) {
+            auto evOpt = levelScript.next();
+            if (evOpt) {
+                for (const auto& spec : evOpt->enemies) {
+                    spawnFromSpec(enemies, spec);
+                }
+            }
+        }
+    }
+
     // If the first event is dialogue, show it immediately so we can verify TextBox rendering
     if (levelScript.hasNext()) {
         auto evOpt = levelScript.next();
@@ -144,6 +164,8 @@ Game::Game()
     }
     
     // Spawn 3 enemies on the right side of the screen that trail each other along a patrol path
+    // Only spawn these demo enemies if there's no level script controlling waves
+    if (!levelScript.hasNext()) {
     float enemyX = WINDOW_WIDTH * 0.85f;
     float enemyY = WINDOW_HEIGHT / 2.0f;
 
@@ -175,7 +197,6 @@ Game::Game()
             enemies.back()->setShootingPattern(makeDirectAtPlayerPattern(rate, 240.0f, 400.0f, false));
         }
     }
-
     // Spawn a pair of slow tanks that travel in straight lines (use Path so they move linearly)
     {
         float tx1 = WINDOW_WIDTH * 0.88f;
@@ -203,10 +224,11 @@ Game::Game()
         auto beamEnemy = std::make_unique<Enemy>(bx, by, 40.0f);
         // No path set - it will use its simple wandering movement or remain mostly stationary
         // Give it a lingering beam pattern: interval, warningDuration, beamDuration, projSpeed
-    // Use a simple direct-at-player pattern instead of the lingering beam
-    beamEnemy->setShootingPattern(makeDirectAtPlayerPattern(2.0f, 180.0f, 800.0f, true));
+        // Use a simple direct-at-player pattern instead of the lingering beam
+        beamEnemy->setShootingPattern(makeDirectAtPlayerPattern(2.0f, 180.0f, 800.0f, true));
         enemies.push_back(std::move(beamEnemy));
     }
+    } // end if (!levelScript.hasNext())
 }
 
 // Create a render texture for the retro playfield if desired. We create it lazily

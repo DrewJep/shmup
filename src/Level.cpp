@@ -55,6 +55,13 @@ void Level::pushSpawn(std::vector<LevelEvent>& out,
         if (std::regex_search(obj, m, std::regex(R"re("start"\s*:\s*"([^"]+)")re")))
             spec.start = m[1].str();
 
+        // Debug: print parsed enemy spec
+        std::cout << "Level::pushSpawn: parsed enemy -> hp=" << spec.hp
+                  << " type='" << spec.type << "'"
+                  << " shot=" << spec.shot
+                  << " path=" << spec.path
+                  << " start='" << spec.start << "'\n";
+
         e.enemies.push_back(spec);
     }
 
