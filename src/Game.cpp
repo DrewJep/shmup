@@ -125,8 +125,8 @@ Game::Game()
         }
 
     // Try to load level script (dialogue/spawn sequence)
-    if (levelScript.loadFromFile("assets/dialogue/1-1.json")) {
-        std::cout << "Loaded level script: assets/dialogue/1-1.json" << std::endl;
+    if (levelScript.loadFromFile("assets/levelScript/1-1.json")) {
+        std::cout << "Loaded level script: assets/levelScript/1-1.json" << std::endl;
     } else {
         std::cout << "No level script found or failed to parse." << std::endl;
     }
