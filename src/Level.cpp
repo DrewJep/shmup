@@ -1,10 +1,10 @@
 #include "Level.h"
 #include <fstream>
 #include <sstream>
-#include <regex>
 #include <iostream>
+#include <json/json.h>
 
-// Utility: read whole file
+// Read entire file
 std::string Level::readAll(const std::string& path) {
     std::ifstream in(path);
     if (!in) return {};
@@ -25,42 +25,25 @@ void Level::pushDialogue(std::vector<LevelEvent>& out,
 }
 
 void Level::pushSpawn(std::vector<LevelEvent>& out,
-                      const std::string& enemiesBlock)
+                      const Json::Value& arrEnemies)
 {
     LevelEvent e;
     e.kind = LevelEvent::Kind::Spawn;
 
-    // Capture each { ... } block inside the enemies array
-    static const std::regex enemyObjRe(R"(\{([^}]*)\})");
-    auto begin = std::sregex_iterator(enemiesBlock.begin(), enemiesBlock.end(), enemyObjRe);
-    auto end   = std::sregex_iterator();
-
-    for (auto it = begin; it != end; ++it) {
+    for (const auto& obj : arrEnemies) {
         EnemySpec spec;
-        std::string obj = (*it)[1].str();
-        std::smatch m;
 
-        if (std::regex_search(obj, m, std::regex(R"re("hp"\s*:\s*(\d+))re")))
-            spec.hp = std::stoi(m[1].str());
+        if (obj.isMember("hp"))    spec.hp = obj["hp"].asInt();
+        if (obj.isMember("type"))  spec.type = obj["type"].asString()[0];
+        if (obj.isMember("shot"))  spec.shot = obj["shot"].asInt();
+        if (obj.isMember("path"))  spec.path = obj["path"].asInt();
+        if (obj.isMember("start")) spec.start = obj["start"].asString();
 
-        if (std::regex_search(obj, m, std::regex(R"re("type"\s*:\s*"([^"]+)")re")))
-            spec.type = m[1].str()[0];
-
-        if (std::regex_search(obj, m, std::regex(R"re("shot"\s*:\s*(\d+))re")))
-            spec.shot = std::stoi(m[1].str());
-
-        if (std::regex_search(obj, m, std::regex(R"re("path"\s*:\s*(\d+))re")))
-            spec.path = std::stoi(m[1].str());
-
-        if (std::regex_search(obj, m, std::regex(R"re("start"\s*:\s*"([^"]+)")re")))
-            spec.start = m[1].str();
-
-        // Debug: print parsed enemy spec
-        std::cout << "Level::pushSpawn: parsed enemy -> hp=" << spec.hp
-                  << " type='" << spec.type << "'"
+        std::cout << "Parsed enemy: hp=" << spec.hp
+                  << " type=" << spec.type
                   << " shot=" << spec.shot
                   << " path=" << spec.path
-                  << " start='" << spec.start << "'\n";
+                  << " start=" << spec.start << "\n";
 
         e.enemies.push_back(spec);
     }
@@ -72,51 +55,52 @@ bool Level::loadFromFile(const std::string& path)
 {
     std::string text = readAll(path);
     if (text.empty()) {
-        std::cerr << "Level::loadFromFile: failed to read file: " << path << std::endl;
+        std::cerr << "Level::loadFromFile: failed to read " << path << "\n";
+        return false;
+    }
+
+    Json::Value root;
+    Json::CharReaderBuilder builder;
+    std::string errs;
+
+    std::istringstream ss(text);
+    if (!Json::parseFromStream(builder, ss, &root, &errs)) {
+        std::cerr << "JSON parse error: " << errs << "\n";
+        return false;
+    }
+
+    if (!root.isMember("events") || !root["events"].isArray()) {
+        std::cerr << "JSON missing events array!\n";
         return false;
     }
 
     m_events.clear();
 
-    // Match any full { ... } event and classify it
-    static const std::regex eventRe(R"(\{[^}]*\})");
-    auto begin = std::sregex_iterator(text.begin(), text.end(), eventRe);
-    auto end   = std::sregex_iterator();
+    // Iterate events array
+    const auto& events = root["events"];
+    for (const auto& obj : events) {
+        if (!obj.isMember("type")) continue;
+        std::string type = obj["type"].asString();
 
-    for (auto it = begin; it != end; ++it) {
-        std::string block = (*it)[0].str();
-        std::smatch m;
-
-        // =============== DIALOGUE ===============
-        if (std::regex_search(block, m, std::regex(R"re("type"\s*:\s*"dialogue")re"))) {
-            std::string speaker, msg;
-
-            if (std::regex_search(block, m, std::regex(R"re("speaker"\s*:\s*"([^"]+)")re")))
-                speaker = m[1].str();
-
-            if (std::regex_search(block, m, std::regex(R"re("text"\s*:\s*"([^"]+)")re")))
-                msg = m[1].str();
-
-            pushDialogue(m_events, speaker, msg);
-            continue;
+        // ========================= DIALOGUE =========================
+        if (type == "dialogue") {
+            std::string speaker = obj.get("speaker", "").asString();
+            std::string text    = obj.get("text", "").asString();
+            pushDialogue(m_events, speaker, text);
         }
 
-        // =============== SPAWN ===============
-        if (std::regex_search(block, m, std::regex(R"re("type"\s*:\s*"spawn")re"))) {
-            if (std::regex_search(block, m, std::regex(R"re("enemies"\s*:\s*\[([^\]]*)\])re"))) {
-                std::string inner = m[1].str();
-                pushSpawn(m_events, inner);
+        // =========================== SPAWN ==========================
+        else if (type == "spawn") {
+            if (obj.isMember("enemies") && obj["enemies"].isArray()) {
+                pushSpawn(m_events, obj["enemies"]);
             }
-            continue;
         }
     }
 
     m_index = 0;
-    std::cout << "Level::loadFromFile: parsed " << m_events.size() << " events from " << path << std::endl;
-    for (size_t i = 0; i < m_events.size(); ++i) {
-        const auto &e = m_events[i];
-        if (e.kind == LevelEvent::Kind::Dialogue) std::cout << "  event["<<i<<"] = Dialogue: '" << e.speaker << "'\n";
-        else std::cout << "  event["<<i<<"] = Spawn: " << e.enemies.size() << " enemies\n";
-    }
+
+    std::cout << "Parsed " << m_events.size()
+              << " events from " << path << "\n";
+
     return !m_events.empty();
 }

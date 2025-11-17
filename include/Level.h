@@ -5,6 +5,8 @@
 #include <vector>
 #include <optional>
 #include <memory>
+// JSON value type used by the Level loader
+#include <json/json.h>
 
 struct EnemySpec {
     int hp = 1;
@@ -45,7 +47,8 @@ private:
     // helpers
     static std::string readAll(const std::string& path);
     static void pushDialogue(std::vector<LevelEvent>& out, const std::string& speaker, const std::string& text);
-    static void pushSpawn(std::vector<LevelEvent>& out, const std::string& block);
+    // Push spawn event from a parsed JSON array of enemy objects
+    static void pushSpawn(std::vector<LevelEvent>& out, const Json::Value& arrEnemies);
 };
 
 #endif // LEVEL_H
