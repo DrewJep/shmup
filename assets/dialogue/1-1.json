@@ -1,0 +1,51 @@
+{
+  "level": "1-1",
+
+  "events": [
+    {
+      "type": "spawn",
+      "enemies": [
+        { "hp": 1, "type": "U", "shot": 1, "path": 1, "start": "left" },
+        { "hp": 1, "type": "U", "shot": 1, "path": 1, "start": "center" },
+        { "hp": 1, "type": "U", "shot": 1, "path": 1, "start": "right" }
+      ]
+    },
+
+    { "type": "dialogue", "speaker": "Informa", "text": "That transformation drained a third of the department budget!" },
+    { "type": "dialogue", "speaker": "Informa", "text": "It's called F.E.E.T - Flight-to-Earth Environment Transformation." },
+    { "type": "dialogue", "speaker": "Doug McGug", "text": "And those rockets under your ship? L.E.G.S - Ludicrous Engineered Groundwalking Shoes." },
+
+    {
+      "type": "dialogue",
+      "speaker": "Informa",
+      "text": "Anyway... small problem. Inf Corp has been sponsoring these enemy waves to 'stress-test' our new systems."
+    },
+    {
+      "type": "dialogue",
+      "speaker": "Informa",
+      "text": "Meaning they literally paid hostile drones to attack us so they could watch the numbers go up."
+    },
+    {
+      "type": "dialogue",
+      "speaker": "Informa",
+      "text": "So yeah. We should probably stop them before they write this off as a 'successful experiment'."
+    },
+
+    {
+      "type": "spawn",
+      "enemies": [
+        { "hp": 1, "type": "T", "shot": 2, "path": 2, "start": "center" }
+      ]
+    },
+
+    { "type": "dialogue", "speaker": "Sherman Shiply", "text": "These enemies are nonstop!!" },
+
+    {
+      "type": "spawn",
+      "enemies": [
+        { "hp": 1, "type": "U", "shot": 1, "path": 3, "start": "left" },
+        { "hp": 1, "type": "U", "shot": 2, "path": 3, "start": "right" }
+      ]
+    }
+  ]
+}

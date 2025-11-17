@@ -8,9 +8,15 @@
 #include "Ship.h"
 #include "Projectile.h"
 #include "Enemy.h"
+#include "TextBox.h"
+#include "Level.h"
 
 class Game {
 public:
+    // Public accessors for window size so free helpers can query them
+    static int windowWidth() { return WINDOW_WIDTH; }
+    static int windowHeight() { return WINDOW_HEIGHT; }
+
     Game();
     ~Game();
     
@@ -37,6 +43,10 @@ private:
     Ship playerShip;
     std::vector<std::unique_ptr<Projectile>> projectiles;
     std::vector<std::unique_ptr<Enemy>> enemies;
+    // Level script
+    Level levelScript;
+    std::unique_ptr<TextBox> activeTextBox; // shown when dialogue event is active
+    bool waitingOnTextAdvance = false; // true when dialogue is shown and waiting for player input
     
     // Collision detection
     void checkCollisions();

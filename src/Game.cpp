@@ -9,6 +9,64 @@
 #include <cstdio>
 #include <SFML/Graphics/RenderTexture.hpp>
 
+// Small helpers for level-driven spawns
+static std::unique_ptr<Path> makePathFor(int pathId, const std::string& start) {
+    using namespace IsometricUtils;
+    std::vector<sf::Vector2f> waypoints;
+    float midY = Game::windowHeight() / 2.0f;
+    float leftX = Game::windowWidth() * 0.12f;
+    float rightX = Game::windowWidth() * 0.88f;
+    float centerX = Game::windowWidth() * 0.5f;
+
+    if (pathId == 1) {
+        // simple vertical bobbing near start X
+        float sx = centerX;
+        if (start == "left") sx = leftX;
+        if (start == "right") sx = rightX;
+        waypoints.push_back({sx, midY - 40.0f});
+        waypoints.push_back({sx, midY + 40.0f});
+        return std::make_unique<Path>(waypoints, 80.0f, true);
+    } else if (pathId == 2) {
+        // wide patrol loop
+        waypoints = { { rightX, midY }, { centerX, midY - 60.0f }, { leftX, midY }, { centerX, midY + 60.0f } };
+        return std::make_unique<Path>(waypoints, 80.0f, true);
+    } else if (pathId == 3) {
+        // across-screen sweep
+        if (start == "left") waypoints = { { leftX, midY - 30.0f }, { rightX, midY + 30.0f } };
+        else if (start == "right") waypoints = { { rightX, midY - 30.0f }, { leftX, midY + 30.0f } };
+        else waypoints = { { centerX - 60.0f, midY }, { centerX + 60.0f, midY } };
+        return std::make_unique<Path>(waypoints, 120.0f, true);
+    }
+
+    // default: small stationary path
+    waypoints.push_back({centerX, midY});
+    return std::make_unique<Path>(waypoints, 50.0f, true);
+}
+
+// spawn helper
+static void spawnFromSpec(std::vector<std::unique_ptr<Enemy>>& enemies, const EnemySpec& spec) {
+    float x = Game::windowWidth() * 0.5f;
+    float y = Game::windowHeight() * 0.5f;
+    if (spec.start == "left") x = Game::windowWidth() * 0.12f;
+    else if (spec.start == "right") x = Game::windowWidth() * 0.88f;
+
+    // slight vertical variance based on path id to avoid stacking exactly
+    y += (spec.path % 3 - 1) * 20.0f;
+
+    Enemy::Type et = (spec.type == 'T') ? Enemy::Type::Tank : Enemy::Type::UFO;
+    auto enemy = std::make_unique<Enemy>(x, y, 80.0f, et);
+    enemy->setHealth(spec.hp);
+
+    // assign path
+    enemy->setPath(makePathFor(spec.path, spec.start));
+
+    // shooting pattern
+    if (spec.shot == 1) enemy->setShootingPattern(makeDirectAtPlayerPattern(1.5f, 220.0f, 400.0f, false));
+    else if (spec.shot == 2) enemy->setShootingPattern(makeRadialPattern(8, 2.5f, 160.0f));
+
+    enemies.push_back(std::move(enemy));
+}
+
 const std::string Game::WINDOW_TITLE = "Down to Earth: A Shmup With Legs";
 
 Game::Game()
@@ -58,6 +116,32 @@ Game::Game()
         } else {
             std::cout << "Background music not found in expected paths." << std::endl;
         }
+
+    // Try to load level script (dialogue/spawn sequence)
+    if (levelScript.loadFromFile("assets/dialogue/1-1.json")) {
+        std::cout << "Loaded level script: assets/dialogue/1-1.json" << std::endl;
+    } else {
+        std::cout << "No level script found or failed to parse." << std::endl;
+    }
+
+    // If the first event is dialogue, show it immediately so we can verify TextBox rendering
+    if (levelScript.hasNext()) {
+        auto evOpt = levelScript.next();
+        if (evOpt && evOpt->kind == LevelEvent::Kind::Dialogue) {
+            if (uiHasFont) {
+                float tbW = static_cast<float>(WINDOW_WIDTH) - 40.0f;
+                float tbH = 96.0f;
+                float tbX = 20.0f;
+                float tbY = static_cast<float>(WINDOW_HEIGHT) - tbH - 20.0f;
+                activeTextBox = std::make_unique<TextBox>(tbX, tbY, tbW, tbH, uiFont, 16);
+                activeTextBox->setText(evOpt->text);
+                waitingOnTextAdvance = true;
+                std::cout << "Showing initial dialogue: " << evOpt->speaker << std::endl;
+            } else {
+                std::cout << "Initial Dialogue: " << evOpt->speaker << ": " << evOpt->text << std::endl;
+            }
+        }
+    }
     
     // Spawn 3 enemies on the right side of the screen that trail each other along a patrol path
     float enemyX = WINDOW_WIDTH * 0.85f;
@@ -90,6 +174,25 @@ Game::Game()
             float rate = 1.2f - i * 0.3f;
             enemies.back()->setShootingPattern(makeDirectAtPlayerPattern(rate, 240.0f, 400.0f, false));
         }
+    }
+
+    // Spawn a pair of slow tanks that travel in straight lines (use Path so they move linearly)
+    {
+        float tx1 = WINDOW_WIDTH * 0.88f;
+        float ty1 = WINDOW_HEIGHT * 0.70f;
+        auto tank1 = std::make_unique<Enemy>(tx1, ty1, 60.0f, Enemy::Type::Tank);
+        std::vector<sf::Vector2f> tankPath1 = { { tx1, ty1 }, { WINDOW_WIDTH * 0.12f, ty1 } };
+        tank1->setPath(std::make_unique<Path>(tankPath1, 50.0f, true));
+        tank1->setShootingPattern(makeDirectAtPlayerPattern(2.5f, 200.0f, 400.0f, false));
+        enemies.push_back(std::move(tank1));
+
+        float tx2 = WINDOW_WIDTH * 0.92f;
+        float ty2 = WINDOW_HEIGHT * 0.85f;
+        auto tank2 = std::make_unique<Enemy>(tx2, ty2, 60.0f, Enemy::Type::Tank);
+        std::vector<sf::Vector2f> tankPath2 = { { tx2, ty2 }, { WINDOW_WIDTH * 0.08f, ty2 } };
+        tank2->setPath(std::make_unique<Path>(tankPath2, 60.0f, true));
+        tank2->setShootingPattern(makeDirectAtPlayerPattern(3.0f, 180.0f, 350.0f, false));
+        enemies.push_back(std::move(tank2));
     }
 
     // Spawn a separate fourth enemy that uses the lingering beam pattern.
@@ -152,6 +255,12 @@ void Game::processEvents() {
             if (keyPressed->code == sf::Keyboard::Key::Escape) {
                 window.close();
                 isRunning = false;
+            }
+            // Advance dialogue if present
+            if (keyPressed->code == sf::Keyboard::Key::Space && waitingOnTextAdvance) {
+                // hide current dialogue and allow update loop to advance
+                activeTextBox.reset();
+                waitingOnTextAdvance = false;
             }
         }
         
@@ -258,6 +367,33 @@ void Game::update(float deltaTime) {
     if (playerShip.getHealth() <= 0) {
         isRunning = false;
         window.close();
+    }
+
+    // Level progression: if no enemies remain and we're not waiting on dialogue, advance to next event
+    if (enemies.empty() && !waitingOnTextAdvance && levelScript.hasNext()) {
+        auto evOpt = levelScript.next();
+        if (evOpt) {
+            LevelEvent ev = *evOpt;
+            if (ev.kind == LevelEvent::Kind::Dialogue) {
+                // Show dialogue in a textbox. If no font, print and continue.
+                if (uiHasFont) {
+                    // place textbox at bottom of screen
+                    float tbW = static_cast<float>(WINDOW_WIDTH) - 40.0f;
+                    float tbH = 96.0f;
+                    float tbX = 20.0f;
+                    float tbY = static_cast<float>(WINDOW_HEIGHT) - tbH - 20.0f;
+                    activeTextBox = std::make_unique<TextBox>(tbX, tbY, tbW, tbH, uiFont, 16);
+                    activeTextBox->setText(ev.text);
+                    waitingOnTextAdvance = true;
+                } else {
+                    std::cout << "Dialogue: " << ev.speaker << ": " << ev.text << std::endl;
+                }
+            } else if (ev.kind == LevelEvent::Kind::Spawn) {
+                for (const auto& spec : ev.enemies) {
+                    spawnFromSpec(enemies, spec);
+                }
+            }
+        }
     }
 }
 
@@ -436,6 +572,11 @@ void Game::render() {
     }
 
     // Display everything
+    // Draw active dialogue textbox (if any) on top of UI
+    if (activeTextBox) {
+        activeTextBox->draw(window);
+    }
+
     window.display();
 }
 

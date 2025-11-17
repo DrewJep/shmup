@@ -1,11 +1,13 @@
 #include "Enemy.h"
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
 #include "ShootingPattern.h"
 // Path is included via Enemy.h
 
 // Static texture
 std::unique_ptr<sf::Texture> Enemy::texture = nullptr;
+std::unique_ptr<sf::Texture> Enemy::tankTexture = nullptr;
 
 bool Enemy::loadTexture() {
     if (!texture) {
@@ -18,26 +20,61 @@ bool Enemy::loadTexture() {
     return true;
 }
 
-Enemy::Enemy(float x, float y, float speed)
+// Load tank texture (optional); returns true if available
+bool Enemy::loadTankTexture() {
+    if (!tankTexture) {
+        tankTexture = std::make_unique<sf::Texture>();
+        if (!tankTexture->loadFromFile("assets/characters/tank.png")) {
+            tankTexture.reset();
+            return false;
+        }
+    }
+    return true;
+}
+
+Enemy::Enemy(float x, float y, float speed, Type type)
     : position(x, y), speed(speed), health(1), maxHealth(1),
     movementTimer(0.0f), directionChangeInterval(1.0f + (std::rand() % 200) / 100.0f),
-      currentFrame(0), animationTimer(0.0f), frameDuration(0.08f), sprite(nullptr)
+      currentFrame(0), animationTimer(0.0f), frameDuration(0.08f), sprite(nullptr), enemyType(type)
 {
-    loadTexture();
+    // Load appropriate texture based on enemy type
+    if (enemyType == Type::Tank) {
+        if (loadTankTexture() && tankTexture) {
+            sprite = std::make_unique<sf::Sprite>(*tankTexture);
+            // Tank image expected to be a single-frame sprite. Use full texture rect.
+            if (sprite) {
+                sprite->setOrigin(sf::Vector2f(tankTexture->getSize().x / 2.f, tankTexture->getSize().y / 2.f));
+                sprite->setPosition(position);
+            }
+        } else {
+            // Fallback to UFO texture if tank not available
+            loadTexture();
+            if (texture) {
+                sprite = std::make_unique<sf::Sprite>(*texture);
+                updateSpriteRect();
+                sf::Vector2u texSize = texture->getSize();
+                int frameWidth = texSize.x / FRAME_COLS;
+                int frameHeight = texSize.y / FRAME_ROWS;
+                sprite->setOrigin({frameWidth / 2.f, frameHeight / 2.f});
+                sprite->setPosition(position);
+            }
+        }
+    } else {
+        loadTexture();
+        if (texture) {
+            sprite = std::make_unique<sf::Sprite>(*texture);
 
-    if (texture) {
-        sprite = std::make_unique<sf::Sprite>(*texture);
+            // Set initial animation frame
+            updateSpriteRect();
 
-        // Set initial animation frame
-        updateSpriteRect();
+            // Set origin to center of frame
+            sf::Vector2u texSize = texture->getSize();
+            int frameWidth = texSize.x / FRAME_COLS;
+            int frameHeight = texSize.y / FRAME_ROWS;
+            sprite->setOrigin({frameWidth / 2.f, frameHeight / 2.f});
 
-        // Set origin to center of frame
-        sf::Vector2u texSize = texture->getSize();
-        int frameWidth = texSize.x / FRAME_COLS;
-        int frameHeight = texSize.y / FRAME_ROWS;
-        sprite->setOrigin({frameWidth / 2.f, frameHeight / 2.f});
-
-        sprite->setPosition(position);
+            sprite->setPosition(position);
+        }
     }
 
     // Start enemy in random direction
@@ -45,11 +82,26 @@ Enemy::Enemy(float x, float y, float speed)
     velocity.x = std::cos(angle) * speed;
     velocity.y = std::sin(angle) * speed;
 }
+    void Enemy::setHealth(int h) {
+        health = h;
+        maxHealth = std::max(1, h);
+    }
 
 void Enemy::updateSpriteRect() {
-    if (!texture || !sprite) return;
+    // If this enemy uses the UFO sprite sheet, pick a sub-rect; tanks use full texture
+    sf::Texture* texPtr = nullptr;
+    if (enemyType == Type::Tank) texPtr = tankTexture.get();
+    else texPtr = texture.get();
+    if (!texPtr || !sprite) return;
 
-    sf::Vector2u texSize = texture->getSize();
+    sf::Vector2u texSize = texPtr->getSize();
+    // If texture appears to be a sheet (width >= FRAME_COLS*height/...), try to slice
+    if (enemyType == Type::Tank) {
+        // single-frame: full texture
+        sprite->setTextureRect(sf::IntRect({0,0}, sf::Vector2i(texSize.x, texSize.y)));
+        return;
+    }
+
     int frameWidth = texSize.x / FRAME_COLS;
     int frameHeight = texSize.y / FRAME_ROWS;
 
