@@ -5,7 +5,6 @@
 #include <vector>
 #include <optional>
 #include <memory>
-// JSON value type used by the Level loader
 #include <json/json.h>
 
 struct EnemySpec {

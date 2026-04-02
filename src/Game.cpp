@@ -1,78 +1,15 @@
 #include "Game.h"
 #include "IsometricUtils.h"
+#include "LevelSpawner.h"
 #include "Projectile.h"
 #include "Path.h"
 #include "ShootingPattern.h"
+#include "TextureCache.h"
 #include <iostream>
 #include <optional>
 #include <cmath>
 #include <cstdio>
 #include <SFML/Graphics/RenderTexture.hpp>
-
-// Small helpers for level-driven spawns
-static std::unique_ptr<Path> makePathFor(int pathId, const std::string& start) {
-    using namespace IsometricUtils;
-    std::vector<sf::Vector2f> waypoints;
-    float midY = Game::windowHeight() / 2.0f;
-    float leftX = Game::windowWidth() * 0.12f;
-    float rightX = Game::windowWidth() * 0.88f;
-    float centerX = Game::windowWidth() * 0.5f;
-
-    if (pathId == 1) {
-        // simple vertical bobbing near start X
-        float sx = centerX;
-        if (start == "left") sx = leftX;
-        if (start == "right") sx = rightX;
-        waypoints.push_back({sx, midY - 40.0f});
-        waypoints.push_back({sx, midY + 40.0f});
-        return std::make_unique<Path>(waypoints, 80.0f, true);
-    } else if (pathId == 2) {
-        // wide patrol loop
-        waypoints = { { rightX, midY }, { centerX, midY - 60.0f }, { leftX, midY }, { centerX, midY + 60.0f } };
-        return std::make_unique<Path>(waypoints, 80.0f, true);
-    } else if (pathId == 3) {
-        // across-screen sweep
-        if (start == "left") waypoints = { { leftX, midY - 30.0f }, { rightX, midY + 30.0f } };
-        else if (start == "right") waypoints = { { rightX, midY - 30.0f }, { leftX, midY + 30.0f } };
-        else waypoints = { { centerX - 60.0f, midY }, { centerX + 60.0f, midY } };
-        return std::make_unique<Path>(waypoints, 120.0f, true);
-    }
-
-    // default: small stationary path
-    waypoints.push_back({centerX, midY});
-    return std::make_unique<Path>(waypoints, 50.0f, true);
-}
-
-// spawn helper
-static void spawnFromSpec(std::vector<std::unique_ptr<Enemy>>& enemies, const EnemySpec& spec) {
-    // Debug: log spawnFromSpec calls
-    std::cout << "spawnFromSpec: spawning -> hp=" << spec.hp
-              << " type='" << spec.type << "'"
-              << " shot=" << spec.shot
-              << " path=" << spec.path
-              << " start='" << spec.start << "'\n";
-
-    float x = Game::windowWidth() * 0.5f;
-    float y = Game::windowHeight() * 0.5f;
-    if (spec.start == "left") x = Game::windowWidth() * 0.12f;
-    else if (spec.start == "right") x = Game::windowWidth() * 0.88f;
-
-    // slight vertical variance based on path id to avoid stacking exactly
-    y += (spec.path % 3 - 1) * 20.0f;
-
-    Enemy::Type et = (spec.type == 'T') ? Enemy::Type::Tank : Enemy::Type::UFO;
-    auto enemy = std::make_unique<Enemy>(x, y, 80.0f, et);
-    enemy->setHealth(spec.hp);
-
-    // assign path
-    enemy->setPath(makePathFor(spec.path, spec.start));
-
-    // shooting pattern
-    if (spec.shot == 1) enemy->setShootingPattern(makeDirectAtPlayerPattern(1.5f, 220.0f, 400.0f, false));
-    else if (spec.shot == 2) enemy->setShootingPattern(makeRadialPattern(8, 2.5f, 160.0f));
-
-    enemies.push_back(std::move(enemy));
-}
 
 const std::string Game::WINDOW_TITLE = "Down to Earth: A Shmup With Legs";
 
@@ -88,8 +25,17 @@ Game::Game()
             currentLevel(1) {
     window.setFramerateLimit(60);
     window.setVerticalSyncEnabled(true);
-    
-    // Pre-load projectile texture
+
+    TextureCache::instance().preload({
+        "assets/characters/player/player_sky.png",
+        "assets/characters/player/player_ground_down_d.png",
+        "assets/characters/player/player_ground_straight.png",
+        "assets/characters/player/player_ground_up_d.png",
+        "assets/characters/ufo.png",
+        "assets/characters/tank.png",
+        "assets/characters/shot.png",
+        "assets/characters/ufo_beam.png",
+    });
     Projectile::loadTexture();
 
     // Attempt to load UI font (optional) - SFML3 uses openFromFile
@@ -138,7 +84,7 @@ Game::Game()
             auto evOpt = levelScript.next();
             if (evOpt) {
                 for (const auto& spec : evOpt->enemies) {
-                    spawnFromSpec(enemies, spec);
+                    spawnFromSpec(enemies, spec, WINDOW_WIDTH, WINDOW_HEIGHT);
                 }
             }
         }
@@ -412,7 +358,7 @@ void Game::update(float deltaTime) {
                 }
             } else if (ev.kind == LevelEvent::Kind::Spawn) {
                 for (const auto& spec : ev.enemies) {
-                    spawnFromSpec(enemies, spec);
+                    spawnFromSpec(enemies, spec, WINDOW_WIDTH, WINDOW_HEIGHT);
                 }
             }
         }
