@@ -5,75 +5,107 @@
 #include <SFML/Audio.hpp>
 #include <vector>
 #include <memory>
+#include <string>
 #include "Ship.h"
 #include "Projectile.h"
 #include "Enemy.h"
 #include "TextBox.h"
 #include "Level.h"
+#include "FlyingObstacle.h"
 
 class Game {
 public:
-    // Public accessors for window size so free helpers can query them
     static int windowWidth() { return WINDOW_WIDTH; }
     static int windowHeight() { return WINDOW_HEIGHT; }
 
     Game();
     ~Game();
-    
+
     void run();
-    
+
 private:
+    enum class GameState { Playing, WaitingDialogueAdvance };
+
     void processEvents();
     void update(float deltaTime);
     void render();
-    
-    // Window
+
+    void configureWindow();
+    void loadPersistentAssets();
+    void startBackgroundMusicIfLoaded();
+
+    bool loadLevelFile(const std::string& path);
+    void rebuildFlyingObstaclesFromLevel();
+    void updateLevelHudLabel();
+    void runInitialScriptHead();
+    void tryLoadCampaignStartOrDemo();
+
+    void showDialogue(const std::string& text, const std::string& speakerForLog);
+
+    void tickGameplaySystems(float deltaTime);
+    void updateBackgroundScroll(float deltaTime);
+    void spawnPlayerProjectileIfReady();
+    void updateProjectiles(float deltaTime);
+    void updateEnemies(float deltaTime);
+    void checkCollisions();
+    void checkProjectileObstacleCollisions();
+    void resolvePlayerFlyingObstacles();
+    void applyEnemyShipContactDamage();
+    void clampPlayerShipToScreen();
+    void updateGameOverIfDead();
+    void advanceLevelScriptIfWaveClear();
+    void tryLoadNextCampaignLevel();
+
+    struct PlayfieldLayout {
+        float playLeft = 0.f;
+        float playTop = 0.f;
+        float playRight = 0.f;
+        float playWidth = 0.f;
+        float playHeight = 0.f;
+        float sideWidth = 0.f;
+    };
+    PlayfieldLayout computePlayfieldLayout() const;
+    void renderDebugOnce();
+    void renderFramePanels(const PlayfieldLayout& layout);
+    void renderPlayfieldWorld(const PlayfieldLayout& layout);
+    void renderHud(const PlayfieldLayout& layout);
+
     sf::RenderWindow window;
-    // Size of the in-game play area (classic 16-bit feel). Use SNES-like resolution.
-    // We'll default to 320x224 (width x height).
     static const int PLAY_WIDTH = 320;
     static const int PLAY_HEIGHT = 224;
-    // Make the window an integer scale of the retro play area so borders are small.
-    // Default to 2x scale of 320x224 -> 640x448 which is close to classic CRT sizes.
-    static const int WINDOW_WIDTH = PLAY_WIDTH * 2; // 640
-    static const int WINDOW_HEIGHT = PLAY_HEIGHT * 2; // 448
+    static const int WINDOW_WIDTH = PLAY_WIDTH * 2;
+    static const int WINDOW_HEIGHT = PLAY_HEIGHT * 2;
     static const std::string WINDOW_TITLE;
-    
-    // Game objects
+
     Ship playerShip;
     std::vector<std::unique_ptr<Projectile>> projectiles;
     std::vector<std::unique_ptr<Enemy>> enemies;
-    // Level script
+    std::vector<FlyingObstacle> flyingObstacles;
+
     Level levelScript;
-    std::unique_ptr<TextBox> activeTextBox; // shown when dialogue event is active
-    bool waitingOnTextAdvance = false; // true when dialogue is shown and waiting for player input
-    
-    // Collision detection
-    void checkCollisions();
-    
-    // Floor/Grid rendering
+    size_t campaignLevelIndex = 0;
+    bool startedFromCampaign = false;
+    std::string levelHudLabel;
+
+    std::unique_ptr<TextBox> activeTextBox;
+    GameState gameState = GameState::Playing;
+
     void drawFloor(sf::RenderWindow& window);
-    static const int FLOOR_GRID_SIZE = 20; // Grid cells across the floor
-    float backgroundScrollX; // Offset for scrolling background (wraps between 0 and TILE_WIDTH)
-    float backgroundScrollY; // Offset for scrolling background (wraps between 0 and TILE_HEIGHT)
-    static constexpr float SCROLL_SPEED = 420.0f; // Pixels per second for background scroll
-    
-    // Timing
+    static const int FLOOR_GRID_SIZE = 20;
+    float backgroundScrollX;
+    float backgroundScrollY;
+    static constexpr float SCROLL_SPEED = 420.0f;
+
     sf::Clock clock;
     float deltaTime;
-    float elapsedTime; // seconds since game start
+    float elapsedTime;
 
-    // UI
     sf::Font uiFont;
     bool uiHasFont;
-    // Music
     sf::Music backgroundMusic;
     bool musicLoaded;
-    
-    // Game state
+
     bool isRunning;
-    int currentLevel;
 };
 
-#endif // GAME_H
-
+#endif

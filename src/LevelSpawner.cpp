@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "Enemy.h"
+#include "EnemyFactory.h"
 #include "Path.h"
 #include "ShootingPattern.h"
 
@@ -55,8 +56,7 @@ void spawnFromSpec(std::vector<std::unique_ptr<Enemy>>& enemies, const EnemySpec
 
     y += (spec.path % 3 - 1) * 20.0f;
 
-    Enemy::Type et = (spec.type == 'T') ? Enemy::Type::Tank : Enemy::Type::UFO;
-    auto enemy = std::make_unique<Enemy>(x, y, 80.0f, et);
+    std::unique_ptr<Enemy> enemy = makeEnemyFromSpec(spec, x, y, 80.0f);
     enemy->setHealth(spec.hp);
 
     enemy->setPath(makePathFor(spec.path, spec.start, windowWidth, windowHeight));
@@ -65,6 +65,8 @@ void spawnFromSpec(std::vector<std::unique_ptr<Enemy>>& enemies, const EnemySpec
         enemy->setShootingPattern(makeDirectAtPlayerPattern(1.5f, 220.0f, 400.0f, false));
     } else if (spec.shot == 2) {
         enemy->setShootingPattern(makeRadialPattern(8, 2.5f, 160.0f));
+    } else if (spec.shot == 3) {
+        enemy->setShootingPattern(makeDirectAtPlayerPattern(2.0f, 180.0f, 800.0f, true));
     }
 
     enemies.push_back(std::move(enemy));

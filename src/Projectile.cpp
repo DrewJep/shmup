@@ -1,7 +1,7 @@
 #include "Projectile.h"
 #include <cmath>
-#include <iostream>
 
+#include "Collision.h"
 #include "TextureCache.h"
 
 namespace {
@@ -154,12 +154,7 @@ sf::FloatRect Projectile::getBounds() const {
 }
 
 bool Projectile::checkCollision(const sf::FloatRect& otherBounds) const {
-    sf::FloatRect myBounds = getBounds();
-    bool xOverlap = (myBounds.position.x < otherBounds.position.x + otherBounds.size.x) &&
-                    (otherBounds.position.x < myBounds.position.x + myBounds.size.x);
-    bool yOverlap = (myBounds.position.y < otherBounds.position.y + otherBounds.size.y) &&
-                    (otherBounds.position.y < myBounds.position.y + myBounds.size.y);
-    return xOverlap && yOverlap;
+    return Collision::rectsOverlap(getBounds(), otherBounds);
 }
 
 bool Projectile::isOffScreen(int screenWidth, int screenHeight) const {

@@ -1,0 +1,33 @@
+{
+  "level": "1-2",
+  "obstacles": [
+    {
+      "x": 400,
+      "y": 300,
+      "width": 72,
+      "height": 88,
+      "texture": "assets/background/objects/building.png"
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "width": 72,
+      "height": 88,
+      "texture": "assets/background/objects/building.png"
+    }
+  ],
+  "events": [
+    {
+      "type": "spawn",
+      "enemies": [
+        { "hp": 2, "type": "U", "shot": 1, "path": 2, "start": "left" },
+        { "hp": 2, "type": "U", "shot": 2, "path": 2, "start": "right" }
+      ]
+    },
+    {
+      "type": "dialogue",
+      "speaker": "Test",
+      "text": "Sector 1-2 — watch the building dead ahead in air mode."
+    }
+  ]
+}

@@ -1,83 +1,101 @@
 #include "Game.h"
+#include "Collision.h"
+#include "GameResources.h"
 #include "IsometricUtils.h"
 #include "LevelSpawner.h"
 #include "Projectile.h"
-#include "Path.h"
-#include "ShootingPattern.h"
-#include "TextureCache.h"
 #include <iostream>
 #include <optional>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <SFML/Graphics/RenderTexture.hpp>
+
+namespace {
+const char* kCampaignLevels[] = {
+    "assets/levelScript/1-1.json",
+    "assets/levelScript/1-2.json",
+};
+constexpr size_t kCampaignLevelCount = sizeof(kCampaignLevels) / sizeof(kCampaignLevels[0]);
+} // namespace
 
 const std::string Game::WINDOW_TITLE = "Down to Earth: A Shmup With Legs";
 
 Game::Game()
     : window(sf::VideoMode(sf::Vector2u(WINDOW_WIDTH, WINDOW_HEIGHT)), WINDOW_TITLE),
       playerShip(WINDOW_WIDTH / 2.0f, WINDOW_HEIGHT / 2.0f, 300.0f),
-            deltaTime(0.0f),
-            elapsedTime(0.0f),
-            backgroundScrollX(0.0f),
-            backgroundScrollY(0.0f),
-            isRunning(true),
-            uiHasFont(false),
-            currentLevel(1) {
-    window.setFramerateLimit(60);
-    window.setVerticalSyncEnabled(true);
+      deltaTime(0.0f),
+      elapsedTime(0.0f),
+      backgroundScrollX(0.0f),
+      backgroundScrollY(0.0f),
+      isRunning(true),
+      uiHasFont(false) {
+    configureWindow();
+    loadPersistentAssets();
+    tryLoadCampaignStartOrDemo();
+    runInitialScriptHead();
+}
 
-    TextureCache::instance().preload({
-        "assets/characters/player/player_sky.png",
-        "assets/characters/player/player_ground_down_d.png",
-        "assets/characters/player/player_ground_straight.png",
-        "assets/characters/player/player_ground_up_d.png",
-        "assets/characters/ufo.png",
-        "assets/characters/tank.png",
-        "assets/characters/shot.png",
-        "assets/characters/ufo_beam.png",
-    });
+void Game::configureWindow() {
+    GameResources::configureWindow(window);
+}
+
+void Game::loadPersistentAssets() {
+    GameResources::preloadCoreTextures();
     Projectile::loadTexture();
 
-    // Attempt to load UI font (optional) - SFML3 uses openFromFile
-        if (uiFont.openFromFile("assets/fonts/Qager-zrlmw.ttf")) {
-        uiHasFont = true;
-    } else {
-        uiHasFont = false;
+    uiHasFont = GameResources::tryLoadUiFont(uiFont);
+
+    musicLoaded = GameResources::tryOpenBackgroundMusic(backgroundMusic);
+    startBackgroundMusicIfLoaded();
+}
+
+void Game::startBackgroundMusicIfLoaded() {
+    if (musicLoaded) {
+        backgroundMusic.setLooping(true);
+        backgroundMusic.play();
     }
+}
 
-        // Attempt to load background music from common locations
-        musicLoaded = false;
-        std::vector<std::string> musicPaths = {
-            "assets/sounds/music/test_song.mp3",
-            "assets/sounds/test_song.mp3",
-            "assets/sound/music/test_song.mp3",
-            "assets/sound/test_song.mp3",
-            "assets/music/test_song.mp3",
-        };
-
-        for (const auto& p : musicPaths) {
-            if (backgroundMusic.openFromFile(p)) {
-                musicLoaded = true;
-                std::cout << "Loaded background music: " << p << std::endl;
-                break;
-            }
-        }
-
-        if (musicLoaded) {
-            backgroundMusic.setLooping(true);
-            backgroundMusic.play();
-        } else {
-            std::cout << "Background music not found in expected paths." << std::endl;
-        }
-
-    // Try to load level script (dialogue/spawn sequence)
-    if (levelScript.loadFromFile("assets/levelScript/1-1.json")) {
-        std::cout << "Loaded level script: assets/levelScript/1-1.json" << std::endl;
-    } else {
-        std::cout << "No level script found or failed to parse." << std::endl;
+bool Game::loadLevelFile(const std::string& path) {
+    if (!levelScript.loadFromFile(path)) {
+        return false;
     }
+    rebuildFlyingObstaclesFromLevel();
+    updateLevelHudLabel();
+    return true;
+}
 
-    // If the first event is a spawn, consume it immediately so the level controls initial enemies.
+void Game::rebuildFlyingObstaclesFromLevel() {
+    flyingObstacles.clear();
+    for (const auto& spec : levelScript.obstacleSpecs()) {
+        flyingObstacles.emplace_back(spec);
+    }
+}
+
+void Game::updateLevelHudLabel() {
+    if (!levelScript.levelId().empty()) {
+        levelHudLabel = levelScript.levelId();
+    } else {
+        levelHudLabel = std::to_string(static_cast<int>(campaignLevelIndex) + 1);
+    }
+}
+
+void Game::tryLoadCampaignStartOrDemo() {
+    campaignLevelIndex = 0;
+    startedFromCampaign = false;
+    if (loadLevelFile(kCampaignLevels[0])) {
+        startedFromCampaign = true;
+        std::cout << "Loaded campaign: " << kCampaignLevels[0] << std::endl;
+        return;
+    }
+    if (loadLevelFile("assets/levelScript/demo.json")) {
+        std::cout << "Loaded fallback demo level (demo.json)\n";
+        return;
+    }
+    std::cerr << "Could not load 1-1.json or demo.json\n";
+}
+
+void Game::runInitialScriptHead() {
     if (levelScript.hasNext()) {
         const LevelEvent* peekEv = levelScript.peek();
         if (peekEv && peekEv->kind == LevelEvent::Kind::Spawn) {
@@ -90,95 +108,28 @@ Game::Game()
         }
     }
 
-    // If the first event is dialogue, show it immediately so we can verify TextBox rendering
     if (levelScript.hasNext()) {
         auto evOpt = levelScript.next();
         if (evOpt && evOpt->kind == LevelEvent::Kind::Dialogue) {
-            if (uiHasFont) {
-                float tbW = static_cast<float>(WINDOW_WIDTH) - 40.0f;
-                float tbH = 96.0f;
-                float tbX = 20.0f;
-                float tbY = static_cast<float>(WINDOW_HEIGHT) - tbH - 20.0f;
-                activeTextBox = std::make_unique<TextBox>(tbX, tbY, tbW, tbH, uiFont, 16);
-                activeTextBox->setText(evOpt->text);
-                waitingOnTextAdvance = true;
-                std::cout << "Showing initial dialogue: " << evOpt->speaker << std::endl;
-            } else {
-                std::cout << "Initial Dialogue: " << evOpt->speaker << ": " << evOpt->text << std::endl;
-            }
+            showDialogue(evOpt->text, evOpt->speaker);
         }
     }
-    
-    // Spawn 3 enemies on the right side of the screen that trail each other along a patrol path
-    // Only spawn these demo enemies if there's no level script controlling waves
-    if (!levelScript.hasNext()) {
-    float enemyX = WINDOW_WIDTH * 0.85f;
-    float enemyY = WINDOW_HEIGHT / 2.0f;
-
-    // Wider patrol that travels across more of the screen in a smooth loop
-    std::vector<sf::Vector2f> patrol = {
-        { WINDOW_WIDTH * 0.85f, WINDOW_HEIGHT * 0.50f },
-        { WINDOW_WIDTH * 0.60f, WINDOW_HEIGHT * 0.25f },
-        { WINDOW_WIDTH * 0.30f, WINDOW_HEIGHT * 0.50f },
-        { WINDOW_WIDTH * 0.60f, WINDOW_HEIGHT * 0.75f }
-    };
-
-    // Create three enemies staggered behind each other along the path
-    const int enemyCount = 3;
-    const float spacing = 40.0f; // pixels to stagger spawn positions
-    for (int i = 0; i < enemyCount; ++i) {
-        float spawnX = enemyX - i * spacing;
-        float spawnY = enemyY;
-        enemies.push_back(std::make_unique<Enemy>(spawnX, spawnY, 80.0f));
-
-        // Each enemy gets its own Path instance so internal position advances separately.
-        auto p = std::make_unique<Path>(patrol, 80.0f, true);
-        enemies.back()->setPath(std::move(p));
-        // Assign shooting patterns: lead enemy shoots radial bursts, followers shoot at player
-        if (i == 0) {
-            enemies.back()->setShootingPattern(makeRadialPattern(10, 3.0f, 160.0f));
-        } else {
-            // Faster fire rate for closer trailing enemies
-            float rate = 1.2f - i * 0.3f;
-            enemies.back()->setShootingPattern(makeDirectAtPlayerPattern(rate, 240.0f, 400.0f, false));
-        }
-    }
-    // Spawn a pair of slow tanks that travel in straight lines (use Path so they move linearly)
-    {
-        float tx1 = WINDOW_WIDTH * 0.88f;
-        float ty1 = WINDOW_HEIGHT * 0.70f;
-        auto tank1 = std::make_unique<Enemy>(tx1, ty1, 60.0f, Enemy::Type::Tank);
-        std::vector<sf::Vector2f> tankPath1 = { { tx1, ty1 }, { WINDOW_WIDTH * 0.12f, ty1 } };
-        tank1->setPath(std::make_unique<Path>(tankPath1, 50.0f, true));
-        tank1->setShootingPattern(makeDirectAtPlayerPattern(2.5f, 200.0f, 400.0f, false));
-        enemies.push_back(std::move(tank1));
-
-        float tx2 = WINDOW_WIDTH * 0.92f;
-        float ty2 = WINDOW_HEIGHT * 0.85f;
-        auto tank2 = std::make_unique<Enemy>(tx2, ty2, 60.0f, Enemy::Type::Tank);
-        std::vector<sf::Vector2f> tankPath2 = { { tx2, ty2 }, { WINDOW_WIDTH * 0.08f, ty2 } };
-        tank2->setPath(std::make_unique<Path>(tankPath2, 60.0f, true));
-        tank2->setShootingPattern(makeDirectAtPlayerPattern(3.0f, 180.0f, 350.0f, false));
-        enemies.push_back(std::move(tank2));
-    }
-
-    // Spawn a separate fourth enemy that uses the lingering beam pattern.
-    // This enemy is not part of the patrol path and will sit near the top-right area.
-    {
-        float bx = WINDOW_WIDTH * 0.72f;
-        float by = WINDOW_HEIGHT * 0.22f;
-        auto beamEnemy = std::make_unique<Enemy>(bx, by, 40.0f);
-        // No path set - it will use its simple wandering movement or remain mostly stationary
-        // Give it a lingering beam pattern: interval, warningDuration, beamDuration, projSpeed
-        // Use a simple direct-at-player pattern instead of the lingering beam
-        beamEnemy->setShootingPattern(makeDirectAtPlayerPattern(2.0f, 180.0f, 800.0f, true));
-        enemies.push_back(std::move(beamEnemy));
-    }
-    } // end if (!levelScript.hasNext())
 }
 
-// Create a render texture for the retro playfield if desired. We create it lazily
-// at first render to avoid early GPU allocation issues on some systems.
+void Game::showDialogue(const std::string& text, const std::string& speakerForLog) {
+    if (uiHasFont) {
+        float tbW = static_cast<float>(WINDOW_WIDTH) - 40.0f;
+        float tbH = 96.0f;
+        float tbX = 20.0f;
+        float tbY = static_cast<float>(WINDOW_HEIGHT) - tbH - 20.0f;
+        activeTextBox = std::make_unique<TextBox>(tbX, tbY, tbW, tbH, uiFont, 16);
+        activeTextBox->setText(text);
+        gameState = GameState::WaitingDialogueAdvance;
+        std::cout << "Dialogue (" << speakerForLog << "): " << text << std::endl;
+    } else {
+        std::cout << "Dialogue: " << speakerForLog << ": " << text << std::endl;
+    }
+}
 
 
 Game::~Game() {
@@ -224,11 +175,10 @@ void Game::processEvents() {
                 window.close();
                 isRunning = false;
             }
-            // Advance dialogue if present
-            if (keyPressed->code == sf::Keyboard::Key::Space && waitingOnTextAdvance) {
-                // hide current dialogue and allow update loop to advance
+            if (keyPressed->code == sf::Keyboard::Key::Space &&
+                gameState == GameState::WaitingDialogueAdvance) {
                 activeTextBox.reset();
-                waitingOnTextAdvance = false;
+                gameState = GameState::Playing;
             }
         }
         
@@ -241,221 +191,298 @@ void Game::processEvents() {
 }
 
 void Game::update(float deltaTime) {
-    // Update input state
+    tickGameplaySystems(deltaTime);
+}
+
+void Game::tickGameplaySystems(float deltaTime) {
     playerShip.updateInput();
-    
-    // Scroll background when in air mode
-    if (playerShip.getMode() == Ship::Mode::Air) {
-        // Scroll to the left to create illusion of forward movement
-        backgroundScrollY -= SCROLL_SPEED * .5f * deltaTime;
-        
-        // Wrap scroll position between 0 and TILE_WIDTH/HEIGHT
-        while (backgroundScrollY >= IsometricUtils::TILE_HEIGHT) backgroundScrollY -= IsometricUtils::TILE_HEIGHT;
-        while (backgroundScrollY < 0.0f) backgroundScrollY += IsometricUtils::TILE_HEIGHT;
-        
-        // Add a slight vertical scroll component to enhance the isometric feel
-        backgroundScrollX -= SCROLL_SPEED * deltaTime;
-        while (backgroundScrollX >= IsometricUtils::TILE_WIDTH) backgroundScrollX -= IsometricUtils::TILE_WIDTH;
-        while (backgroundScrollX < 0.0f) backgroundScrollX += IsometricUtils::TILE_WIDTH;
-    }
-    
-    // Handle shooting (call shouldShoot each frame - it handles cooldown internally)
-    if (playerShip.shouldShoot()) {
-        sf::Vector2f shipPos = playerShip.getPosition();
-        float angle = playerShip.getForwardAngle();
-        
-        // Spawn projectile slightly forward so it doesn't overlap with ship
-        // Offset by ~30 pixels in the forward direction
-        float offsetDistance = 30.0f;
-        float spawnX = shipPos.x + std::cos(angle) * offsetDistance;
-        float spawnY = shipPos.y + std::sin(angle) * offsetDistance;
-        
-        projectiles.push_back(std::make_unique<Projectile>(spawnX, spawnY, angle));
-    }
-    
-    // Update game objects
-    playerShip.updateMouseAim(window); // Update facing based on mouse position
+    updateBackgroundScroll(deltaTime);
+    spawnPlayerProjectileIfReady();
+    playerShip.updateMouseAim(window);
     playerShip.update(deltaTime);
-    
-    // Update projectiles
+    updateProjectiles(deltaTime);
+    updateEnemies(deltaTime);
+    checkProjectileObstacleCollisions();
+    checkCollisions();
+    resolvePlayerFlyingObstacles();
+    applyEnemyShipContactDamage();
+    clampPlayerShipToScreen();
+    updateGameOverIfDead();
+    advanceLevelScriptIfWaveClear();
+}
+
+void Game::updateBackgroundScroll(float deltaTime) {
+    if (playerShip.getMode() != Ship::Mode::Air) return;
+
+    backgroundScrollY -= SCROLL_SPEED * 0.5f * deltaTime;
+    while (backgroundScrollY >= IsometricUtils::TILE_HEIGHT) backgroundScrollY -= IsometricUtils::TILE_HEIGHT;
+    while (backgroundScrollY < 0.0f) backgroundScrollY += IsometricUtils::TILE_HEIGHT;
+
+    backgroundScrollX -= SCROLL_SPEED * deltaTime;
+    while (backgroundScrollX >= IsometricUtils::TILE_WIDTH) backgroundScrollX -= IsometricUtils::TILE_WIDTH;
+    while (backgroundScrollX < 0.0f) backgroundScrollX += IsometricUtils::TILE_WIDTH;
+}
+
+void Game::spawnPlayerProjectileIfReady() {
+    if (!playerShip.shouldShoot()) return;
+
+    sf::Vector2f shipPos = playerShip.getPosition();
+    float angle = playerShip.getForwardAngle();
+    constexpr float offsetDistance = 30.0f;
+    float spawnX = shipPos.x + std::cos(angle) * offsetDistance;
+    float spawnY = shipPos.y + std::sin(angle) * offsetDistance;
+    projectiles.push_back(std::make_unique<Projectile>(spawnX, spawnY, angle));
+}
+
+void Game::updateProjectiles(float deltaTime) {
     for (auto it = projectiles.begin(); it != projectiles.end();) {
         (*it)->update(deltaTime);
-        
-        // Remove projectiles that are off screen
         if ((*it)->isOffScreen(WINDOW_WIDTH, WINDOW_HEIGHT)) {
             it = projectiles.erase(it);
         } else {
             ++it;
         }
     }
-    
-    // Update enemies (pass player position and allow enemies to spawn projectiles)
+}
+
+void Game::updateEnemies(float deltaTime) {
     sf::Vector2f playerPos = playerShip.getPosition();
     for (auto it = enemies.begin(); it != enemies.end();) {
         (*it)->update(deltaTime, WINDOW_WIDTH, WINDOW_HEIGHT, playerPos, projectiles);
-
-        // Remove dead enemies
         if ((*it)->isDead()) {
             it = enemies.erase(it);
         } else {
             ++it;
         }
     }
-    
-    // Check collisions between projectiles and enemies
-    checkCollisions();
+}
 
-    // Check collisions between enemies and player ship
-    for (auto enemyIt = enemies.begin(); enemyIt != enemies.end();) {
-        {
-            // Manual AABB overlap check (SFML 3 removed FloatRect::intersects helper in some configs)
-            sf::FloatRect a = (*enemyIt)->getBounds();
-            sf::FloatRect b = playerShip.getBounds();
-            bool xOverlap = (a.position.x < b.position.x + b.size.x) && (b.position.x < a.position.x + a.size.x);
-            bool yOverlap = (a.position.y < b.position.y + b.size.y) && (b.position.y < a.position.y + a.size.y);
-            if (xOverlap && yOverlap) {
-                // Damage player and enemy (simple rules: both take 1)
-                playerShip.takeDamage(1);
-                (*enemyIt)->takeDamage(1);
-            }
-        }
-        ++enemyIt;
-    }
-    
-    // Keep ship within screen bounds
-    sf::Vector2f pos = playerShip.getPosition();
-    float shipRadius = 15.0f;
-    
-    if (pos.x < shipRadius) playerShip.setPosition(shipRadius, pos.y);
-    if (pos.x > WINDOW_WIDTH - shipRadius) playerShip.setPosition(WINDOW_WIDTH - shipRadius, pos.y);
-    if (pos.y < shipRadius) playerShip.setPosition(pos.x, shipRadius);
-    if (pos.y > WINDOW_HEIGHT - shipRadius) playerShip.setPosition(pos.x, WINDOW_HEIGHT - shipRadius);
-
-    // End game if player health is 0
-    if (playerShip.getHealth() <= 0) {
-        isRunning = false;
-        window.close();
-    }
-
-    // Level progression: if no enemies remain and we're not waiting on dialogue, advance to next event
-    if (enemies.empty() && !waitingOnTextAdvance && levelScript.hasNext()) {
-        auto evOpt = levelScript.next();
-        if (evOpt) {
-            LevelEvent ev = *evOpt;
-            if (ev.kind == LevelEvent::Kind::Dialogue) {
-                // Show dialogue in a textbox. If no font, print and continue.
-                if (uiHasFont) {
-                    // place textbox at bottom of screen
-                    float tbW = static_cast<float>(WINDOW_WIDTH) - 40.0f;
-                    float tbH = 96.0f;
-                    float tbX = 20.0f;
-                    float tbY = static_cast<float>(WINDOW_HEIGHT) - tbH - 20.0f;
-                    activeTextBox = std::make_unique<TextBox>(tbX, tbY, tbW, tbH, uiFont, 16);
-                    activeTextBox->setText(ev.text);
-                    waitingOnTextAdvance = true;
-                } else {
-                    std::cout << "Dialogue: " << ev.speaker << ": " << ev.text << std::endl;
-                }
-            } else if (ev.kind == LevelEvent::Kind::Spawn) {
-                for (const auto& spec : ev.enemies) {
-                    spawnFromSpec(enemies, spec, WINDOW_WIDTH, WINDOW_HEIGHT);
-                }
-            }
+void Game::applyEnemyShipContactDamage() {
+    for (auto& enemy : enemies) {
+        if (Collision::rectsOverlap(enemy->getBounds(), playerShip.getBounds())) {
+            playerShip.takeDamage(1);
+            enemy->takeDamage(1);
         }
     }
 }
 
-void Game::render() {
-    // Clear with a dark background (space-like)
-    window.clear(sf::Color(20, 20, 40));
+void Game::clampPlayerShipToScreen() {
+    sf::Vector2f pos = playerShip.getPosition();
+    constexpr float shipRadius = 15.0f;
 
-    // One-time diagnostic print to help debug drawing issues
-    static bool debugPrinted = false;
-    if (!debugPrinted) {
-        debugPrinted = true;
-        std::cout << "Render diagnostic: projectiles=" << projectiles.size()
-                  << " enemies=" << enemies.size()
-                  << " playerPos=(" << playerShip.getPosition().x << "," << playerShip.getPosition().y << ")"
-                  << " musicLoaded=" << musicLoaded << std::endl;
+    if (pos.x < shipRadius) playerShip.setPosition(shipRadius, pos.y);
+    if (pos.x > WINDOW_WIDTH - shipRadius) playerShip.setPosition(WINDOW_WIDTH - shipRadius, pos.y);
+    if (pos.y < shipRadius) playerShip.setPosition(pos.x, shipRadius);
+    if (pos.y > WINDOW_HEIGHT - shipRadius) playerShip.setPosition(pos.x, WINDOW_HEIGHT - shipRadius);
+}
+
+void Game::updateGameOverIfDead() {
+    if (playerShip.getHealth() <= 0) {
+        isRunning = false;
+        window.close();
+    }
+}
+
+void Game::checkProjectileObstacleCollisions() {
+    if (flyingObstacles.empty()) return;
+
+    for (auto it = projectiles.begin(); it != projectiles.end();) {
+        bool hit = false;
+        sf::FloatRect pb = (*it)->getBounds();
+        for (const auto& o : flyingObstacles) {
+            if (Collision::rectsOverlap(pb, o.getBounds())) {
+                hit = true;
+                break;
+            }
+        }
+        if (hit) {
+            it = projectiles.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void Game::resolvePlayerFlyingObstacles() {
+    if (playerShip.getMode() != Ship::Mode::Air || flyingObstacles.empty()) return;
+
+    for (int iter = 0; iter < 4; ++iter) {
+        sf::FloatRect sb = playerShip.getBounds();
+        bool moved = false;
+        for (const auto& o : flyingObstacles) {
+            sf::FloatRect ob = o.getBounds();
+            if (!Collision::rectsOverlap(sb, ob)) continue;
+
+            float dxLeft = (ob.position.x + ob.size.x) - sb.position.x;
+            float dxRight = (sb.position.x + sb.size.x) - ob.position.x;
+            float dyUp = (ob.position.y + ob.size.y) - sb.position.y;
+            float dyDown = (sb.position.y + sb.size.y) - ob.position.y;
+            float vals[4] = {dxLeft, dxRight, dyUp, dyDown};
+            int minIdx = 0;
+            for (int i = 1; i < 4; ++i) {
+                if (vals[i] < vals[minIdx]) minIdx = i;
+            }
+
+            sf::Vector2f p = playerShip.getPosition();
+            if (minIdx == 0) {
+                p.x += dxLeft;
+            } else if (minIdx == 1) {
+                p.x -= dxRight;
+            } else if (minIdx == 2) {
+                p.y += dyUp;
+            } else {
+                p.y -= dyDown;
+            }
+            playerShip.setPosition(p.x, p.y);
+            moved = true;
+            break;
+        }
+        if (!moved) break;
+    }
+}
+
+void Game::advanceLevelScriptIfWaveClear() {
+    if (!enemies.empty() || gameState != GameState::Playing) return;
+
+    if (levelScript.hasNext()) {
+        auto evOpt = levelScript.next();
+        if (!evOpt) return;
+
+        LevelEvent ev = *evOpt;
+        if (ev.kind == LevelEvent::Kind::Dialogue) {
+            showDialogue(ev.text, ev.speaker);
+        } else if (ev.kind == LevelEvent::Kind::Spawn) {
+            for (const auto& spec : ev.enemies) {
+                spawnFromSpec(enemies, spec, WINDOW_WIDTH, WINDOW_HEIGHT);
+            }
+        }
+        return;
     }
 
-    // Draw play area borders and UI panels
-    // Compute an integer scale for the retro play area so it scales crisply.
+    if (levelScript.finishedAllEvents()) {
+        tryLoadNextCampaignLevel();
+    }
+}
+
+void Game::tryLoadNextCampaignLevel() {
+    if (!startedFromCampaign) return;
+    if (campaignLevelIndex + 1 >= kCampaignLevelCount) {
+        std::cout << "Campaign complete (no further levels).\n";
+        return;
+    }
+
+    campaignLevelIndex++;
+    projectiles.clear();
+    enemies.clear();
+
+    if (!loadLevelFile(kCampaignLevels[campaignLevelIndex])) {
+        std::cerr << "Failed to load " << kCampaignLevels[campaignLevelIndex] << std::endl;
+        campaignLevelIndex--;
+        return;
+    }
+
+    std::cout << "Started level file: " << kCampaignLevels[campaignLevelIndex] << std::endl;
+    runInitialScriptHead();
+}
+
+void Game::render() {
+    window.clear(sf::Color(20, 20, 40));
+    renderDebugOnce();
+
+    const PlayfieldLayout layout = computePlayfieldLayout();
+    renderFramePanels(layout);
+    renderPlayfieldWorld(layout);
+    renderHud(layout);
+
+    if (activeTextBox) {
+        activeTextBox->draw(window);
+    }
+
+    window.display();
+}
+
+Game::PlayfieldLayout Game::computePlayfieldLayout() const {
+    PlayfieldLayout L;
     int scale = std::min(WINDOW_WIDTH / PLAY_WIDTH, WINDOW_HEIGHT / PLAY_HEIGHT);
     if (scale < 1) scale = 1;
-    float playWidth = static_cast<float>(PLAY_WIDTH * scale);
-    float playHeight = static_cast<float>(PLAY_HEIGHT * scale);
-    float playLeft = (WINDOW_WIDTH - playWidth) / 2.0f;
-    // Center vertically as well so the playfield feels like a centered arcade viewport
-    float playTop = (WINDOW_HEIGHT - playHeight) / 2.0f;
-    float playRight = playLeft + playWidth;
+    L.playWidth = static_cast<float>(PLAY_WIDTH * scale);
+    L.playHeight = static_cast<float>(PLAY_HEIGHT * scale);
+    L.playLeft = (WINDOW_WIDTH - L.playWidth) / 2.0f;
+    L.playTop = (WINDOW_HEIGHT - L.playHeight) / 2.0f;
+    L.playRight = L.playLeft + L.playWidth;
+    L.sideWidth = L.playLeft;
+    return L;
+}
 
-    // Side panels thickness
-    float sideWidth = playLeft; // left and right panel width
+void Game::renderDebugOnce() {
+    static bool debugPrinted = false;
+    if (debugPrinted) return;
+    debugPrinted = true;
+    std::cout << "Render diagnostic: projectiles=" << projectiles.size()
+              << " enemies=" << enemies.size()
+              << " playerPos=(" << playerShip.getPosition().x << "," << playerShip.getPosition().y << ")"
+              << " musicLoaded=" << musicLoaded << std::endl;
+}
 
-    // Draw background for panels
-    sf::RectangleShape leftPanel(sf::Vector2f(sideWidth, static_cast<float>(WINDOW_HEIGHT)));
+void Game::renderFramePanels(const PlayfieldLayout& layout) {
+    sf::RectangleShape leftPanel(sf::Vector2f(layout.sideWidth, static_cast<float>(WINDOW_HEIGHT)));
     leftPanel.setPosition(sf::Vector2f(0.f, 0.f));
     leftPanel.setFillColor(sf::Color(30, 30, 45));
     window.draw(leftPanel);
 
-    sf::RectangleShape rightPanel(sf::Vector2f(sideWidth, static_cast<float>(WINDOW_HEIGHT)));
-    rightPanel.setPosition(sf::Vector2f(playRight, 0.f));
+    sf::RectangleShape rightPanel(sf::Vector2f(layout.sideWidth, static_cast<float>(WINDOW_HEIGHT)));
+    rightPanel.setPosition(sf::Vector2f(layout.playRight, 0.f));
     rightPanel.setFillColor(sf::Color(30, 30, 45));
     window.draw(rightPanel);
 
-    // Draw play area bg (slightly different color)
-    sf::RectangleShape playArea(sf::Vector2f(playWidth, playHeight));
-    playArea.setPosition(sf::Vector2f(playLeft, playTop));
+    sf::RectangleShape playArea(sf::Vector2f(layout.playWidth, layout.playHeight));
+    playArea.setPosition(sf::Vector2f(layout.playLeft, layout.playTop));
     playArea.setFillColor(sf::Color(17, 154, 58));
     window.draw(playArea);
 
-    // Draw thin top bar for HUD (time, level)
-    float topBarH = 28.0f;
+    constexpr float topBarH = 28.0f;
     sf::RectangleShape topBar(sf::Vector2f(static_cast<float>(WINDOW_WIDTH), topBarH));
     topBar.setPosition(sf::Vector2f(0.f, 0.f));
     topBar.setFillColor(sf::Color(25, 25, 40));
     topBar.setOutlineColor(sf::Color(80, 80, 90));
     topBar.setOutlineThickness(1.0f);
     window.draw(topBar);
+}
 
-    // Save current view and set a view clipped to the play area so drawFloor uses the same screen coords
+void Game::renderPlayfieldWorld(const PlayfieldLayout& layout) {
     sf::View prevView = window.getView();
     sf::View playView = prevView;
-    // Keep the same size as the window view but translate so (0,0) for drawing maps to the play area
     playView.setViewport(sf::FloatRect(
-        sf::Vector2f(playLeft / static_cast<float>(WINDOW_WIDTH), playTop / static_cast<float>(WINDOW_HEIGHT)),
-        sf::Vector2f(playWidth / static_cast<float>(WINDOW_WIDTH), playHeight / static_cast<float>(WINDOW_HEIGHT))
-    ));
+        sf::Vector2f(layout.playLeft / static_cast<float>(WINDOW_WIDTH),
+                     layout.playTop / static_cast<float>(WINDOW_HEIGHT)),
+        sf::Vector2f(layout.playWidth / static_cast<float>(WINDOW_WIDTH),
+                       layout.playHeight / static_cast<float>(WINDOW_HEIGHT))));
     window.setView(playView);
 
-    // Draw floor inside play area
     drawFloor(window);
 
-    // Draw projectiles first (so ship appears on top)
+    for (const auto& obs : flyingObstacles) {
+        obs.draw(window);
+    }
+
     for (const auto& projectile : projectiles) {
         projectile->draw(window);
     }
-
-    // Draw enemies
     for (const auto& enemy : enemies) {
         enemy->draw(window);
     }
-
-    // Draw ship on top
     playerShip.draw(window);
 
-    // Restore previous view to draw UI elements in screen coordinates
     window.setView(prevView);
+}
 
-    // Draw UI: health bar (vertical stacked) in left panel
-    float uiMargin = 16.0f;
+void Game::renderHud(const PlayfieldLayout& layout) {
+    constexpr float uiMargin = 16.0f;
     float healthPanelX = uiMargin;
     float healthPanelY = uiMargin;
-    float healthPanelW = sideWidth - uiMargin * 2.0f;
+    float healthPanelW = layout.sideWidth - uiMargin * 2.0f;
     float healthPanelH = 120.0f;
 
-    // Panel background
     sf::RectangleShape hpBg(sf::Vector2f(healthPanelW, healthPanelH));
     hpBg.setPosition(sf::Vector2f(healthPanelX, healthPanelY));
     hpBg.setFillColor(sf::Color(12, 12, 20));
@@ -463,8 +490,7 @@ void Game::render() {
     hpBg.setOutlineThickness(2.0f);
     window.draw(hpBg);
 
-    // Draw stacked HP segments (top to bottom)
-    int maxHP = 20;
+    constexpr int maxHP = 20;
     int hp = playerShip.getHealth();
     float segmentH = (healthPanelH - 8.0f) / static_cast<float>(maxHP);
     for (int i = 0; i < maxHP; ++i) {
@@ -475,77 +501,55 @@ void Game::render() {
 
         sf::RectangleShape seg(sf::Vector2f(segW, segH));
         seg.setPosition(sf::Vector2f(segX, segY));
-        if (i < hp) {
-            // Filled segment (from top down)
-            seg.setFillColor(sf::Color(200, 30, 30));
-        } else {
-            seg.setFillColor(sf::Color(60, 60, 70));
-        }
+        seg.setFillColor(i < hp ? sf::Color(200, 30, 30) : sf::Color(60, 60, 70));
         seg.setOutlineColor(sf::Color(30, 30, 40));
         seg.setOutlineThickness(1.0f);
         window.draw(seg);
     }
 
-    // Draw ship mode below the HP panel
-    if (uiHasFont) {
-        std::string modeStr = (playerShip.getMode() == Ship::Mode::Air) ? "MODE: AIR" : "MODE: GROUND";
-        sf::Text modeText(uiFont, modeStr, 14);
-        modeText.setFillColor(sf::Color::White);
-        modeText.setPosition(sf::Vector2f(healthPanelX, healthPanelY + healthPanelH + 8.0f));
-        window.draw(modeText);
-    }
+    if (!uiHasFont) return;
 
-    // Right panel: show weapon slots (primary, special, defense) and top bar shows time/level
-    if (uiHasFont) {
-        // Weapons stacked vertically on the right panel
-        float weaponX = playRight + uiMargin;
-        float weaponY = uiMargin;
-        float iconW = healthPanelW;
-        float iconH = 28.0f;
+    std::string modeStr = (playerShip.getMode() == Ship::Mode::Air) ? "MODE: AIR" : "MODE: GROUND";
+    sf::Text modeText(uiFont, modeStr, 14);
+    modeText.setFillColor(sf::Color::White);
+    modeText.setPosition(sf::Vector2f(healthPanelX, healthPanelY + healthPanelH + 8.0f));
+    window.draw(modeText);
 
-        auto drawWeapon = [&](const std::string &name, const sf::Color &col, float yOff) {
-            sf::RectangleShape icon(sf::Vector2f(iconW, iconH));
-            icon.setPosition(sf::Vector2f(weaponX, weaponY + yOff));
-            icon.setFillColor(col);
-            icon.setOutlineColor(sf::Color(30, 30, 40));
-            icon.setOutlineThickness(1.0f);
-            window.draw(icon);
+    float weaponX = layout.playRight + uiMargin;
+    float weaponY = uiMargin;
+    float iconW = healthPanelW;
+    float iconH = 28.0f;
 
-            sf::Text t(uiFont, name, 14);
-            t.setFillColor(sf::Color::White);
-            t.setPosition(sf::Vector2f(weaponX + 6.0f, weaponY + yOff + 6.0f));
-            window.draw(t);
-        };
+    auto drawWeapon = [&](const std::string& name, const sf::Color& col, float yOff) {
+        sf::RectangleShape icon(sf::Vector2f(iconW, iconH));
+        icon.setPosition(sf::Vector2f(weaponX, weaponY + yOff));
+        icon.setFillColor(col);
+        icon.setOutlineColor(sf::Color(30, 30, 40));
+        icon.setOutlineThickness(1.0f);
+        window.draw(icon);
 
-        drawWeapon("Primary", sf::Color(160,160,200), 0.0f);
-        drawWeapon("Special", sf::Color(200,160,160), iconH + 6.0f);
-        drawWeapon("Defense", sf::Color(160,200,160), 2*(iconH + 6.0f));
+        sf::Text t(uiFont, name, 14);
+        t.setFillColor(sf::Color::White);
+        t.setPosition(sf::Vector2f(weaponX + 6.0f, weaponY + yOff + 6.0f));
+        window.draw(t);
+    };
 
-        // Draw time and level on the top bar
-        char buf[64];
-        int seconds = static_cast<int>(elapsedTime);
-        std::snprintf(buf, sizeof(buf), "%02d:%02d", seconds / 60, seconds % 60);
-        sf::Text timeText(uiFont, buf, 14);
-        timeText.setFillColor(sf::Color::White);
-        timeText.setPosition(sf::Vector2f(playLeft + 8.0f, 4.0f));
-        window.draw(timeText);
+    drawWeapon("Primary", sf::Color(160, 160, 200), 0.0f);
+    drawWeapon("Special", sf::Color(200, 160, 160), iconH + 6.0f);
+    drawWeapon("Defense", sf::Color(160, 200, 160), 2.0f * (iconH + 6.0f));
 
-        char buf2[32];
-        std::snprintf(buf2, sizeof(buf2), "Level %d", currentLevel);
-        sf::Text levelText(uiFont, buf2, 14);
-        levelText.setFillColor(sf::Color::White);
-        // Right-align level text on top bar
-        levelText.setPosition(sf::Vector2f(playRight - 80.0f, 4.0f));
-        window.draw(levelText);
-    }
+    char buf[64];
+    int seconds = static_cast<int>(elapsedTime);
+    std::snprintf(buf, sizeof(buf), "%02d:%02d", seconds / 60, seconds % 60);
+    sf::Text timeText(uiFont, buf, 14);
+    timeText.setFillColor(sf::Color::White);
+    timeText.setPosition(sf::Vector2f(layout.playLeft + 8.0f, 4.0f));
+    window.draw(timeText);
 
-    // Display everything
-    // Draw active dialogue textbox (if any) on top of UI
-    if (activeTextBox) {
-        activeTextBox->draw(window);
-    }
-
-    window.display();
+    sf::Text levelText(uiFont, levelHudLabel.empty() ? "—" : levelHudLabel, 14);
+    levelText.setFillColor(sf::Color::White);
+    levelText.setPosition(sf::Vector2f(layout.playRight - 80.0f, 4.0f));
+    window.draw(levelText);
 }
 
 void Game::drawFloor(sf::RenderWindow& window) {

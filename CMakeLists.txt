@@ -86,6 +86,23 @@ if (NOT JSONCPP_LIBRARIES)
     message(FATAL_ERROR "jsoncpp not found! Install with: brew install jsoncpp")
 endif()
 
+# Prefer a concrete .dylib/.so/.a so linking works without setting LIBRARY_PATH (e.g. macOS + Homebrew).
+if (NOT EXISTS "${JSONCPP_LIBRARIES}")
+    find_library(JSONCPP_LIBRARY_ABSOLUTE NAMES jsoncpp jsoncpp_lib
+        PATHS
+            "${JSONCPP_HOMEBREW_PREFIX}/lib"
+            /opt/homebrew/lib
+            /usr/local/lib
+            /usr/lib
+        NO_DEFAULT_PATH)
+    if (NOT JSONCPP_LIBRARY_ABSOLUTE)
+        find_library(JSONCPP_LIBRARY_ABSOLUTE NAMES jsoncpp jsoncpp_lib)
+    endif()
+    if (JSONCPP_LIBRARY_ABSOLUTE)
+        set(JSONCPP_LIBRARIES "${JSONCPP_LIBRARY_ABSOLUTE}")
+    endif()
+endif()
+
 message(STATUS "jsoncpp include dirs: ${JSONCPP_INCLUDE_DIRS}")
 message(STATUS "jsoncpp libs: ${JSONCPP_LIBRARIES}")
 

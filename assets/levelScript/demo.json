@@ -1,0 +1,26 @@
+{
+  "level": "demo",
+  "events": [
+    {
+      "type": "spawn",
+      "enemies": [
+        { "hp": 1, "type": "U", "shot": 2, "path": 2, "start": "center" },
+        { "hp": 1, "type": "U", "shot": 1, "path": 2, "start": "center" },
+        { "hp": 1, "type": "U", "shot": 1, "path": 2, "start": "center" }
+      ]
+    },
+    {
+      "type": "spawn",
+      "enemies": [
+        { "hp": 1, "type": "T", "shot": 1, "path": 3, "start": "left" },
+        { "hp": 1, "type": "T", "shot": 1, "path": 3, "start": "right" }
+      ]
+    },
+    {
+      "type": "spawn",
+      "enemies": [
+        { "hp": 1, "type": "U", "shot": 3, "path": 1, "start": "center" }
+      ]
+    }
+  ]
+}

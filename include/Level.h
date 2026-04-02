@@ -15,18 +15,21 @@ struct EnemySpec {
     std::string start = "center"; // left/center/right
 };
 
+struct ObstacleSpec {
+    float x = 0.f;
+    float y = 0.f;
+    float width = 0.f;  // 0 = use texture size
+    float height = 0.f;
+    std::string texturePath;
+};
+
 struct LevelEvent {
     enum class Kind { Dialogue, Spawn } kind;
-    // Dialogue
     std::string speaker;
     std::string text;
-    // Spawn
     std::vector<EnemySpec> enemies;
 };
 
-// Very small level loader for our limited JSON format. Not a full JSON parser;
-// it looks for `type: "dialogue"` entries with speaker/text and `type: "spawn"`
-// entries with an enemies array of simple objects.
 class Level {
 public:
     Level() = default;
@@ -39,15 +42,22 @@ public:
         return m_events[m_index++];
     }
 
+    // True when every event has been consumed (level had at least one event).
+    bool finishedAllEvents() const { return !hasNext() && !m_events.empty(); }
+
+    const std::vector<ObstacleSpec>& obstacleSpecs() const { return m_obstacles; }
+    const std::string& levelId() const { return m_levelId; }
+
 private:
     std::vector<LevelEvent> m_events;
+    std::vector<ObstacleSpec> m_obstacles;
+    std::string m_levelId;
     size_t m_index = 0;
 
-    // helpers
     static std::string readAll(const std::string& path);
     static void pushDialogue(std::vector<LevelEvent>& out, const std::string& speaker, const std::string& text);
-    // Push spawn event from a parsed JSON array of enemy objects
     static void pushSpawn(std::vector<LevelEvent>& out, const Json::Value& arrEnemies);
+    static void pushObstacle(std::vector<ObstacleSpec>& out, const Json::Value& obj);
 };
 
-#endif // LEVEL_H
+#endif
